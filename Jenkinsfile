@@ -103,59 +103,68 @@ pipeline {
                                 <th>Current Build #${current.buildNumber}</th>
                                 <th>Difference</th>
                             </tr>
+
                             <tr>
                                 <td>Samples</td>
                                 <td>${previous.sampleCount}</td>
                                 <td>${current.sampleCount}</td>
                                 <td>${current.sampleCount - previous.sampleCount}</td>
                             </tr>
+
                             <tr>
                                 <td>Error Count</td>
                                 <td>${previous.errorCount}</td>
                                 <td>${current.errorCount}</td>
                                 <td>${current.errorCount - previous.errorCount}</td>
                             </tr>
+
                             <tr>
                                 <td>Error %</td>
-                                <td>${String.format("%.2f", previous.errorPct)}%</td>
-                                <td>${String.format("%.2f", current.errorPct)}%</td>
-                                <td>${String.format("%.2f", current.errorPct - previous.errorPct)}%</td>
+                                <td>${String.format("%.2f", previous.errorPct.toDouble())}%</td>
+                                <td>${String.format("%.2f", current.errorPct.toDouble())}%</td>
+                                <td>${String.format("%.2f", current.errorPct.toDouble() - previous.errorPct.toDouble())}%</td>
                             </tr>
+
                             <tr>
                                 <td>Average Response Time</td>
-                                <td>${String.format("%.2f", previous.average)} ms</td>
-                                <td>${String.format("%.2f", current.average)} ms</td>
-                                <td>${String.format("%.2f", current.average - previous.average)} ms</td>
+                                <td>${String.format("%.2f", previous.average.toDouble())} ms</td>
+                                <td>${String.format("%.2f", current.average.toDouble())} ms</td>
+                                <td>${String.format("%.2f", current.average.toDouble() - previous.average.toDouble())} ms</td>
                             </tr>
+
                             <tr>
                                 <td>Min Response Time</td>
                                 <td>${previous.min} ms</td>
                                 <td>${current.min} ms</td>
                                 <td>${current.min - previous.min} ms</td>
                             </tr>
+
                             <tr>
                                 <td>Max Response Time</td>
                                 <td>${previous.max} ms</td>
                                 <td>${current.max} ms</td>
                                 <td>${current.max - previous.max} ms</td>
                             </tr>
+
                             <tr>
                                 <td>Median Response Time</td>
-                                <td>${String.format("%.2f", previous.median)} ms</td>
-                                <td>${String.format("%.2f", current.median)} ms</td>
-                                <td>${String.format("%.2f", current.median - previous.median)} ms</td>
+                                <td>${String.format("%.2f", previous.median.toDouble())} ms</td>
+                                <td>${String.format("%.2f", current.median.toDouble())} ms</td>
+                                <td>${String.format("%.2f", current.median.toDouble() - previous.median.toDouble())} ms</td>
                             </tr>
+
                             <tr>
                                 <td>90th Percentile</td>
-                                <td>${String.format("%.2f", previous.pct90)} ms</td>
-                                <td>${String.format("%.2f", current.pct90)} ms</td>
-                                <td>${String.format("%.2f", current.pct90 - previous.pct90)} ms</td>
+                                <td>${String.format("%.2f", previous.pct90.toDouble())} ms</td>
+                                <td>${String.format("%.2f", current.pct90.toDouble())} ms</td>
+                                <td>${String.format("%.2f", current.pct90.toDouble() - previous.pct90.toDouble())} ms</td>
                             </tr>
+
                             <tr>
                                 <td>Throughput</td>
-                                <td>${String.format("%.2f", previous.throughput)}</td>
-                                <td>${String.format("%.2f", current.throughput)}</td>
-                                <td>${String.format("%.2f", current.throughput - previous.throughput)}</td>
+                                <td>${String.format("%.2f", previous.throughput.toDouble())}</td>
+                                <td>${String.format("%.2f", current.throughput.toDouble())}</td>
+                                <td>${String.format("%.2f", current.throughput.toDouble() - previous.throughput.toDouble())}</td>
                             </tr>
                         </table>
                         """
@@ -229,6 +238,11 @@ pipeline {
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
                 <p>Reports are published in Jenkins UI and attached as ZIP files.</p>
+
+                <ul>
+                    <li>SCR01 HTML Report - Build ${BUILD_NUMBER}</li>
+                    <li>SCR01 Comparison Report - Build ${BUILD_NUMBER}</li>
+                </ul>
 
                 <a href="${BUILD_URL}">Open Jenkins Build</a>
                 </body>
