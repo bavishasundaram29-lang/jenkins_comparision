@@ -4,8 +4,11 @@ pipeline {
     environment {
         JMETER_HOME = "C:\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3"
         JMETER = "${JMETER_HOME}\\bin\\jmeter.bat"
+
         JMX_FILE = "jpetstore_jenkins_comparision\\SCR01_Jpetstore.jmx"
+
         REPORT_NAME = "SCR01_Report_Build_${BUILD_NUMBER}"
+
         HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Jenkins_Comparision_History"
     }
 
@@ -23,12 +26,12 @@ pipeline {
                 bat '''
                 if exist results rmdir /s /q results
                 if exist report rmdir /s /q report
-                if exist comparison rmdir /s /q comparison
+                if exist aggregate-report rmdir /s /q aggregate-report
                 if exist zipreport rmdir /s /q zipreport
 
                 mkdir results
                 mkdir report
-                mkdir comparison
+                mkdir aggregate-report
                 mkdir zipreport
                 '''
             }
@@ -45,7 +48,7 @@ pipeline {
             }
         }
 
-        stage('Generate Current Build Summary') {
+        stage('Generate Current Aggregate Summary') {
             steps {
                 script {
                     def stats = readJSON file: "report/${REPORT_NAME}/statistics.json"
@@ -54,50 +57,60 @@ pipeline {
                     def currentSummary = [
                         buildNumber : env.BUILD_NUMBER,
                         reportName  : env.REPORT_NAME,
-                        sampleCount : total.sampleCount,
-                        errorCount  : total.errorCount,
+                        samples     : total.sampleCount,
+                        failures    : total.errorCount,
                         errorPct    : total.errorPct,
                         average     : total.meanResTime,
                         min         : total.minResTime,
                         max         : total.maxResTime,
                         median      : total.medianResTime,
                         pct90       : total.pct1ResTime,
+                        pct95       : total.pct2ResTime,
+                        pct99       : total.pct3ResTime,
                         throughput  : total.throughput
                     ]
 
-                    writeJSON file: 'comparison/current-summary.json',
+                    writeJSON file: 'aggregate-report/current-summary.json',
                     json: currentSummary,
                     pretty: 4
                 }
             }
         }
 
-        stage('Compare With Previous Build') {
+        stage('Create Aggregate Comparison Report') {
             steps {
                 script {
                     bat """
                     if not exist "%HISTORY_DIR%" mkdir "%HISTORY_DIR%"
                     """
 
-                    def comparisonHtml = """
+                    def html = """
                     <html>
+                    <head>
+                        <title>SCR01 Aggregate Comparison Report</title>
+                    </head>
                     <body>
-                    <h2>SCR01 JPetstore Build Comparison Report</h2>
+
+                    <h2>SCR01 JPetstore Aggregate Comparison Report</h2>
+
+                    <h3>Job Name : Jenkins_Comparision</h3>
                     <h3>Current Build : #${BUILD_NUMBER}</h3>
+
+                    <br>
                     """
 
                     if (fileExists("${HISTORY_DIR}\\previous-summary.json")) {
 
                         bat """
-                        copy "%HISTORY_DIR%\\previous-summary.json" "comparison\\previous-summary.json" /Y
+                        copy "%HISTORY_DIR%\\previous-summary.json" "aggregate-report\\previous-summary.json" /Y
                         """
 
-                        def previous = readJSON file: 'comparison/previous-summary.json'
-                        def current = readJSON file: 'comparison/current-summary.json'
+                        def previous = readJSON file: 'aggregate-report/previous-summary.json'
+                        def current = readJSON file: 'aggregate-report/current-summary.json'
 
-                        comparisonHtml += """
+                        html += """
                         <table border="1" cellpadding="6" cellspacing="0">
-                            <tr>
+                            <tr style="background-color:#f2f2f2;">
                                 <th>Metric</th>
                                 <th>Previous Build #${previous.buildNumber}</th>
                                 <th>Current Build #${current.buildNumber}</th>
@@ -105,17 +118,17 @@ pipeline {
                             </tr>
 
                             <tr>
-                                <td>Samples</td>
-                                <td>${previous.sampleCount}</td>
-                                <td>${current.sampleCount}</td>
-                                <td>${current.sampleCount - previous.sampleCount}</td>
+                                <td>Total Samples</td>
+                                <td>${previous.samples}</td>
+                                <td>${current.samples}</td>
+                                <td>${current.samples - previous.samples}</td>
                             </tr>
 
                             <tr>
-                                <td>Error Count</td>
-                                <td>${previous.errorCount}</td>
-                                <td>${current.errorCount}</td>
-                                <td>${current.errorCount - previous.errorCount}</td>
+                                <td>Failures</td>
+                                <td>${previous.failures}</td>
+                                <td>${current.failures}</td>
+                                <td>${current.failures - previous.failures}</td>
                             </tr>
 
                             <tr>
@@ -133,14 +146,14 @@ pipeline {
                             </tr>
 
                             <tr>
-                                <td>Min Response Time</td>
+                                <td>Minimum Response Time</td>
                                 <td>${previous.min} ms</td>
                                 <td>${current.min} ms</td>
                                 <td>${current.min - previous.min} ms</td>
                             </tr>
 
                             <tr>
-                                <td>Max Response Time</td>
+                                <td>Maximum Response Time</td>
                                 <td>${previous.max} ms</td>
                                 <td>${current.max} ms</td>
                                 <td>${current.max - previous.max} ms</td>
@@ -161,6 +174,20 @@ pipeline {
                             </tr>
 
                             <tr>
+                                <td>95th Percentile</td>
+                                <td>${String.format("%.2f", previous.pct95 * 1.0)} ms</td>
+                                <td>${String.format("%.2f", current.pct95 * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.pct95 * 1.0) - (previous.pct95 * 1.0))} ms</td>
+                            </tr>
+
+                            <tr>
+                                <td>99th Percentile</td>
+                                <td>${String.format("%.2f", previous.pct99 * 1.0)} ms</td>
+                                <td>${String.format("%.2f", current.pct99 * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.pct99 * 1.0) - (previous.pct99 * 1.0))} ms</td>
+                            </tr>
+
+                            <tr>
                                 <td>Throughput</td>
                                 <td>${String.format("%.2f", previous.throughput * 1.0)}</td>
                                 <td>${String.format("%.2f", current.throughput * 1.0)}</td>
@@ -170,21 +197,27 @@ pipeline {
                         """
 
                     } else {
-                        comparisonHtml += """
+                        html += """
                         <h3>No Previous Build Found</h3>
-                        <p>Comparison report will be generated from the second build onwards.</p>
+                        <p>This is the first available build summary.</p>
+                        <p>From the next successful build, Jenkins will compare current build details with previous build details.</p>
                         """
                     }
 
-                    comparisonHtml += """
+                    html += """
+                    <br><br>
+                    <h3>Report Location In Workspace</h3>
+                    <p>aggregate-report\\aggregate-comparison-report.html</p>
+
                     </body>
                     </html>
                     """
 
-                    writeFile file: 'comparison/comparison-report.html', text: comparisonHtml
+                    writeFile file: 'aggregate-report/aggregate-comparison-report.html',
+                    text: html
 
                     bat """
-                    copy "comparison\\current-summary.json" "%HISTORY_DIR%\\previous-summary.json" /Y
+                    copy "aggregate-report\\current-summary.json" "%HISTORY_DIR%\\previous-summary.json" /Y
                     """
                 }
             }
@@ -193,30 +226,20 @@ pipeline {
         stage('Create ZIP Report') {
             steps {
                 powershell """
-                Compress-Archive -Path "report\\${REPORT_NAME}\\*" -DestinationPath "zipreport\\${REPORT_NAME}.zip" -Force
-                Compress-Archive -Path "comparison\\*" -DestinationPath "zipreport\\SCR01_Comparison_Build_${BUILD_NUMBER}.zip" -Force
+                Compress-Archive -Path "aggregate-report\\*" -DestinationPath "zipreport\\SCR01_Aggregate_Comparison_Build_${BUILD_NUMBER}.zip" -Force
                 """
             }
         }
 
-        stage('Publish Reports In Jenkins UI') {
+        stage('Publish Aggregate Report In Jenkins UI') {
             steps {
                 publishHTML([
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true,
-                    reportDir: "report/${REPORT_NAME}",
-                    reportFiles: 'index.html',
-                    reportName: "SCR01 HTML Report - Build ${BUILD_NUMBER}"
-                ])
-
-                publishHTML([
-                    allowMissing: false,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
-                    reportDir: 'comparison',
-                    reportFiles: 'comparison-report.html',
-                    reportName: "SCR01 Comparison Report - Build ${BUILD_NUMBER}"
+                    reportDir: 'aggregate-report',
+                    reportFiles: 'aggregate-comparison-report.html',
+                    reportName: "SCR01 Aggregate Comparison Report - Build ${BUILD_NUMBER}"
                 ])
             }
         }
@@ -225,32 +248,37 @@ pipeline {
     post {
         always {
             emailext(
-                subject: "Jenkins SCR01 Comparison Report - Build ${BUILD_NUMBER}",
+                subject: "SCR01 Aggregate Comparison Report - Build ${BUILD_NUMBER}",
                 mimeType: 'text/html',
                 to: 'bavishasundar@gmail.com',
                 body: """
                 <html>
                 <body>
-                <h2>SCR01 JPetstore Execution Completed</h2>
+
+                <h2>SCR01 Aggregate Comparison Report Generated</h2>
+
                 <h3>Job Name : Jenkins_Comparision</h3>
                 <h3>Build Number : ${BUILD_NUMBER}</h3>
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
-                <p>Reports are published in Jenkins UI and attached as ZIP files.</p>
+                <p>The aggregate comparison report contains previous build and current build details.</p>
 
+                <p>Report is available in:</p>
                 <ul>
-                    <li>SCR01 HTML Report - Build ${BUILD_NUMBER}</li>
-                    <li>SCR01 Comparison Report - Build ${BUILD_NUMBER}</li>
+                    <li>Jenkins UI</li>
+                    <li>Workspace: aggregate-report\\aggregate-comparison-report.html</li>
+                    <li>Email attachment as ZIP</li>
                 </ul>
 
                 <a href="${BUILD_URL}">Open Jenkins Build</a>
+
                 </body>
                 </html>
                 """,
                 attachmentsPattern: 'zipreport/*.zip'
             )
 
-            archiveArtifacts artifacts: 'results/*.jtl, report/**/*, comparison/**/*, zipreport/*.zip',
+            archiveArtifacts artifacts: 'results/*.jtl, report/**/*, aggregate-report/**/*, zipreport/*.zip',
             fingerprint: true
         }
     }
