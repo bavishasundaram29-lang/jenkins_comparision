@@ -3,7 +3,6 @@ pipeline {
     agent any
 
     environment {
-
         JMETER_HOME = "C:\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3"
         JMETER = "${JMETER_HOME}\\bin\\jmeter.bat"
 
@@ -15,18 +14,14 @@ pipeline {
     stages {
 
         stage('Checkout Code') {
-
             steps {
-
                 git branch: 'main',
                 url: 'https://github.com/bavishasundaram29-lang/jenkins_comparision.git'
             }
         }
 
         stage('Clean Workspace') {
-
             steps {
-
                 bat '''
                 if exist results rmdir /s /q results
                 if exist report rmdir /s /q report
@@ -42,9 +37,7 @@ pipeline {
         }
 
         stage('Run JMeter Test') {
-
             steps {
-
                 bat """
                 "%JMETER%" -n ^
                 -t "%JMX_FILE%" ^
@@ -55,17 +48,12 @@ pipeline {
         }
 
         stage('Generate Current Build Summary') {
-
             steps {
-
                 script {
-
                     def stats = readJSON file: "report/${REPORT_NAME}/statistics.json"
-
                     def total = stats['Total']
 
                     def currentSummary = [
-
                         buildNumber : env.BUILD_NUMBER,
                         reportName  : env.REPORT_NAME,
                         sampleCount : total.sampleCount,
@@ -87,38 +75,33 @@ pipeline {
         }
 
         stage('Compare With Previous Build') {
-
             steps {
-
                 script {
 
-                    copyArtifacts(
+                    step([
+                        $class: 'CopyArtifact',
                         projectName: 'Jenkins_Comparision',
-                        selector: lastSuccessful(),
+                        selector: [$class: 'StatusBuildSelector', stable: false],
                         filter: 'comparison/current-summary.json',
                         target: 'comparison/previous',
                         optional: true
-                    )
+                    ])
 
                     def comparisonHtml = """
                     <html>
                     <body>
 
                     <h2>SCR01 JPetstore Build Comparison Report</h2>
-
                     <h3>Current Build : #${BUILD_NUMBER}</h3>
                     """
 
                     if (fileExists('comparison/previous/comparison/current-summary.json')) {
 
                         def previous = readJSON file: 'comparison/previous/comparison/current-summary.json'
-
                         def current = readJSON file: 'comparison/current-summary.json'
 
                         comparisonHtml += """
-
                         <table border="1" cellpadding="6" cellspacing="0">
-
                             <tr>
                                 <th>Metric</th>
                                 <th>Previous Build #${previous.buildNumber}</th>
@@ -188,19 +171,14 @@ pipeline {
                                 <td>${String.format("%.2f", current.throughput)}</td>
                                 <td>${String.format("%.2f", current.throughput - previous.throughput)}</td>
                             </tr>
-
                         </table>
                         """
 
                     } else {
 
                         comparisonHtml += """
-
                         <h3>No Previous Build Found</h3>
-
-                        <p>
-                        Comparison report will be generated from second successful build onwards.
-                        </p>
+                        <p>Comparison report will be generated from second successful build onwards.</p>
                         """
                     }
 
@@ -216,37 +194,33 @@ pipeline {
         }
 
         stage('Create ZIP Report') {
-
             steps {
-
                 powershell """
-                Compress-Archive -Path report\\${REPORT_NAME}\\* `
-                -DestinationPath zipreport\\${REPORT_NAME}.zip -Force
+                if (Test-Path "zipreport\\${REPORT_NAME}.zip") {
+                    Remove-Item "zipreport\\${REPORT_NAME}.zip" -Force
+                }
+
+                Compress-Archive -Path "report\\${REPORT_NAME}\\*" -DestinationPath "zipreport\\${REPORT_NAME}.zip" -Force
+                Compress-Archive -Path "comparison\\*" -DestinationPath "zipreport\\SCR01_Comparison_Build_${BUILD_NUMBER}.zip" -Force
                 """
             }
         }
 
         stage('Publish Reports In Jenkins UI') {
-
             steps {
-
                 publishHTML([
-
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true,
-
                     reportDir: "report/${REPORT_NAME}",
                     reportFiles: 'index.html',
                     reportName: "SCR01 HTML Report - Build ${BUILD_NUMBER}"
                 ])
 
                 publishHTML([
-
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true,
-
                     reportDir: 'comparison',
                     reportFiles: 'comparison-report.html',
                     reportName: "SCR01 Comparison Report - Build ${BUILD_NUMBER}"
@@ -256,58 +230,47 @@ pipeline {
     }
 
     post {
-
         always {
-
             emailext(
-
                 subject: "Jenkins SCR01 Comparison Report - Build ${BUILD_NUMBER}",
-
                 mimeType: 'text/html',
-
                 to: 'bavishasundar@gmail.com',
 
                 body: """
-
                 <html>
                 <body>
 
                 <h2>SCR01 JPetstore Execution Completed</h2>
 
                 <h3>Job Name : Jenkins_Comparision</h3>
-
                 <h3>Build Number : ${BUILD_NUMBER}</h3>
-
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
                 <br>
 
                 <h3>Reports Published In Jenkins UI</h3>
-
                 <ul>
-
-                    <li>
-                    SCR01 HTML Report - Build ${BUILD_NUMBER}
-                    </li>
-
-                    <li>
-                    SCR01 Comparison Report - Build ${BUILD_NUMBER}
-                    </li>
-
+                    <li>SCR01 HTML Report - Build ${BUILD_NUMBER}</li>
+                    <li>SCR01 Comparison Report - Build ${BUILD_NUMBER}</li>
                 </ul>
 
                 <br>
 
                 <h3>Download Report ZIP</h3>
-
                 <a href="${BUILD_URL}artifact/zipreport/${REPORT_NAME}.zip">
                 Download HTML Report
                 </a>
 
                 <br><br>
 
-                <h3>Open Jenkins Build</h3>
+                <h3>Download Comparison ZIP</h3>
+                <a href="${BUILD_URL}artifact/zipreport/SCR01_Comparison_Build_${BUILD_NUMBER}.zip">
+                Download Comparison Report
+                </a>
 
+                <br><br>
+
+                <h3>Open Jenkins Build</h3>
                 <a href="${BUILD_URL}">
                 Open Build
                 </a>
