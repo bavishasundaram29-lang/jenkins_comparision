@@ -1,14 +1,12 @@
 pipeline {
-
     agent any
 
     environment {
         JMETER_HOME = "C:\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3"
         JMETER = "${JMETER_HOME}\\bin\\jmeter.bat"
-
         JMX_FILE = "jpetstore_jenkins_comparision\\SCR01_Jpetstore.jmx"
-
         REPORT_NAME = "SCR01_Report_Build_${BUILD_NUMBER}"
+        HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Jenkins_Comparision_History"
     }
 
     stages {
@@ -77,27 +75,24 @@ pipeline {
         stage('Compare With Previous Build') {
             steps {
                 script {
-
-                    step([
-                        $class: 'CopyArtifact',
-                        projectName: 'Jenkins_Comparision',
-                        selector: [$class: 'StatusBuildSelector', stable: false],
-                        filter: 'comparison/current-summary.json',
-                        target: 'comparison/previous',
-                        optional: true
-                    ])
+                    bat """
+                    if not exist "%HISTORY_DIR%" mkdir "%HISTORY_DIR%"
+                    """
 
                     def comparisonHtml = """
                     <html>
                     <body>
-
                     <h2>SCR01 JPetstore Build Comparison Report</h2>
                     <h3>Current Build : #${BUILD_NUMBER}</h3>
                     """
 
-                    if (fileExists('comparison/previous/comparison/current-summary.json')) {
+                    if (fileExists("${HISTORY_DIR}\\previous-summary.json")) {
 
-                        def previous = readJSON file: 'comparison/previous/comparison/current-summary.json'
+                        bat """
+                        copy "%HISTORY_DIR%\\previous-summary.json" "comparison\\previous-summary.json" /Y
+                        """
+
+                        def previous = readJSON file: 'comparison/previous-summary.json'
                         def current = readJSON file: 'comparison/current-summary.json'
 
                         comparisonHtml += """
@@ -108,63 +103,54 @@ pipeline {
                                 <th>Current Build #${current.buildNumber}</th>
                                 <th>Difference</th>
                             </tr>
-
                             <tr>
                                 <td>Samples</td>
                                 <td>${previous.sampleCount}</td>
                                 <td>${current.sampleCount}</td>
                                 <td>${current.sampleCount - previous.sampleCount}</td>
                             </tr>
-
                             <tr>
                                 <td>Error Count</td>
                                 <td>${previous.errorCount}</td>
                                 <td>${current.errorCount}</td>
                                 <td>${current.errorCount - previous.errorCount}</td>
                             </tr>
-
                             <tr>
                                 <td>Error %</td>
                                 <td>${String.format("%.2f", previous.errorPct)}%</td>
                                 <td>${String.format("%.2f", current.errorPct)}%</td>
                                 <td>${String.format("%.2f", current.errorPct - previous.errorPct)}%</td>
                             </tr>
-
                             <tr>
                                 <td>Average Response Time</td>
                                 <td>${String.format("%.2f", previous.average)} ms</td>
                                 <td>${String.format("%.2f", current.average)} ms</td>
                                 <td>${String.format("%.2f", current.average - previous.average)} ms</td>
                             </tr>
-
                             <tr>
                                 <td>Min Response Time</td>
                                 <td>${previous.min} ms</td>
                                 <td>${current.min} ms</td>
                                 <td>${current.min - previous.min} ms</td>
                             </tr>
-
                             <tr>
                                 <td>Max Response Time</td>
                                 <td>${previous.max} ms</td>
                                 <td>${current.max} ms</td>
                                 <td>${current.max - previous.max} ms</td>
                             </tr>
-
                             <tr>
                                 <td>Median Response Time</td>
                                 <td>${String.format("%.2f", previous.median)} ms</td>
                                 <td>${String.format("%.2f", current.median)} ms</td>
                                 <td>${String.format("%.2f", current.median - previous.median)} ms</td>
                             </tr>
-
                             <tr>
                                 <td>90th Percentile</td>
                                 <td>${String.format("%.2f", previous.pct90)} ms</td>
                                 <td>${String.format("%.2f", current.pct90)} ms</td>
                                 <td>${String.format("%.2f", current.pct90 - previous.pct90)} ms</td>
                             </tr>
-
                             <tr>
                                 <td>Throughput</td>
                                 <td>${String.format("%.2f", previous.throughput)}</td>
@@ -175,10 +161,9 @@ pipeline {
                         """
 
                     } else {
-
                         comparisonHtml += """
                         <h3>No Previous Build Found</h3>
-                        <p>Comparison report will be generated from second successful build onwards.</p>
+                        <p>Comparison report will be generated from the second build onwards.</p>
                         """
                     }
 
@@ -189,6 +174,10 @@ pipeline {
 
                     writeFile file: 'comparison/comparison-report.html',
                     text: comparisonHtml
+
+                    bat """
+                    copy "comparison\\current-summary.json" "%HISTORY_DIR%\\previous-summary.json" /Y
+                    """
                 }
             }
         }
@@ -196,10 +185,6 @@ pipeline {
         stage('Create ZIP Report') {
             steps {
                 powershell """
-                if (Test-Path "zipreport\\${REPORT_NAME}.zip") {
-                    Remove-Item "zipreport\\${REPORT_NAME}.zip" -Force
-                }
-
                 Compress-Archive -Path "report\\${REPORT_NAME}\\*" -DestinationPath "zipreport\\${REPORT_NAME}.zip" -Force
                 Compress-Archive -Path "comparison\\*" -DestinationPath "zipreport\\SCR01_Comparison_Build_${BUILD_NUMBER}.zip" -Force
                 """
@@ -235,50 +220,20 @@ pipeline {
                 subject: "Jenkins SCR01 Comparison Report - Build ${BUILD_NUMBER}",
                 mimeType: 'text/html',
                 to: 'bavishasundar@gmail.com',
-
                 body: """
                 <html>
                 <body>
-
                 <h2>SCR01 JPetstore Execution Completed</h2>
-
                 <h3>Job Name : Jenkins_Comparision</h3>
                 <h3>Build Number : ${BUILD_NUMBER}</h3>
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
-                <br>
+                <p>Reports are published in Jenkins UI and attached as ZIP files.</p>
 
-                <h3>Reports Published In Jenkins UI</h3>
-                <ul>
-                    <li>SCR01 HTML Report - Build ${BUILD_NUMBER}</li>
-                    <li>SCR01 Comparison Report - Build ${BUILD_NUMBER}</li>
-                </ul>
-
-                <br>
-
-                <h3>Download Report ZIP</h3>
-                <a href="${BUILD_URL}artifact/zipreport/${REPORT_NAME}.zip">
-                Download HTML Report
-                </a>
-
-                <br><br>
-
-                <h3>Download Comparison ZIP</h3>
-                <a href="${BUILD_URL}artifact/zipreport/SCR01_Comparison_Build_${BUILD_NUMBER}.zip">
-                Download Comparison Report
-                </a>
-
-                <br><br>
-
-                <h3>Open Jenkins Build</h3>
-                <a href="${BUILD_URL}">
-                Open Build
-                </a>
-
+                <a href="${BUILD_URL}">Open Jenkins Build</a>
                 </body>
                 </html>
                 """,
-
                 attachmentsPattern: 'zipreport/*.zip'
             )
 
