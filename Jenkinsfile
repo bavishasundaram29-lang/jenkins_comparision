@@ -4,11 +4,8 @@ pipeline {
     environment {
         JMETER_HOME = "C:\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3"
         JMETER = "${JMETER_HOME}\\bin\\jmeter.bat"
-
         JMX_FILE = "jpetstore_jenkins_comparision\\SCR01_Jpetstore.jmx"
-
         REPORT_NAME = "SCR01_Report_Build_${BUILD_NUMBER}"
-
         HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Jenkins_Comparision_History"
     }
 
@@ -56,18 +53,17 @@ pipeline {
 
                     def currentSummary = [
                         buildNumber : env.BUILD_NUMBER,
-                        reportName  : env.REPORT_NAME,
-                        samples     : total.sampleCount,
-                        failures    : total.errorCount,
-                        errorPct    : total.errorPct,
-                        average     : total.meanResTime,
-                        min         : total.minResTime,
-                        max         : total.maxResTime,
-                        median      : total.medianResTime,
-                        pct90       : total.pct1ResTime,
-                        pct95       : total.pct2ResTime,
-                        pct99       : total.pct3ResTime,
-                        throughput  : total.throughput
+                        samples     : total.sampleCount ?: 0,
+                        failures    : total.errorCount ?: 0,
+                        errorPct    : total.errorPct ?: 0,
+                        average     : total.meanResTime ?: 0,
+                        min         : total.minResTime ?: 0,
+                        max         : total.maxResTime ?: 0,
+                        median      : total.medianResTime ?: 0,
+                        pct90       : total.pct1ResTime ?: 0,
+                        pct95       : total.pct2ResTime ?: 0,
+                        pct99       : total.pct3ResTime ?: 0,
+                        throughput  : total.throughput ?: 0
                     ]
 
                     writeJSON file: 'aggregate-report/current-summary.json',
@@ -86,16 +82,10 @@ pipeline {
 
                     def html = """
                     <html>
-                    <head>
-                        <title>SCR01 Aggregate Comparison Report</title>
-                    </head>
                     <body>
-
                     <h2>SCR01 JPetstore Aggregate Comparison Report</h2>
-
                     <h3>Job Name : Jenkins_Comparision</h3>
                     <h3>Current Build : #${BUILD_NUMBER}</h3>
-
                     <br>
                     """
 
@@ -110,7 +100,7 @@ pipeline {
 
                         html += """
                         <table border="1" cellpadding="6" cellspacing="0">
-                            <tr style="background-color:#f2f2f2;">
+                            <tr>
                                 <th>Metric</th>
                                 <th>Previous Build #${previous.buildNumber}</th>
                                 <th>Current Build #${current.buildNumber}</th>
@@ -119,79 +109,79 @@ pipeline {
 
                             <tr>
                                 <td>Total Samples</td>
-                                <td>${previous.samples}</td>
-                                <td>${current.samples}</td>
-                                <td>${current.samples - previous.samples}</td>
+                                <td>${previous.samples ?: 0}</td>
+                                <td>${current.samples ?: 0}</td>
+                                <td>${(current.samples ?: 0) - (previous.samples ?: 0)}</td>
                             </tr>
 
                             <tr>
                                 <td>Failures</td>
-                                <td>${previous.failures}</td>
-                                <td>${current.failures}</td>
-                                <td>${current.failures - previous.failures}</td>
+                                <td>${previous.failures ?: 0}</td>
+                                <td>${current.failures ?: 0}</td>
+                                <td>${(current.failures ?: 0) - (previous.failures ?: 0)}</td>
                             </tr>
 
                             <tr>
                                 <td>Error %</td>
-                                <td>${String.format("%.2f", previous.errorPct * 1.0)}%</td>
-                                <td>${String.format("%.2f", current.errorPct * 1.0)}%</td>
-                                <td>${String.format("%.2f", (current.errorPct * 1.0) - (previous.errorPct * 1.0))}%</td>
+                                <td>${String.format("%.2f", (previous.errorPct ?: 0) * 1.0)}%</td>
+                                <td>${String.format("%.2f", (current.errorPct ?: 0) * 1.0)}%</td>
+                                <td>${String.format("%.2f", ((current.errorPct ?: 0) * 1.0) - ((previous.errorPct ?: 0) * 1.0))}%</td>
                             </tr>
 
                             <tr>
                                 <td>Average Response Time</td>
-                                <td>${String.format("%.2f", previous.average * 1.0)} ms</td>
-                                <td>${String.format("%.2f", current.average * 1.0)} ms</td>
-                                <td>${String.format("%.2f", (current.average * 1.0) - (previous.average * 1.0))} ms</td>
+                                <td>${String.format("%.2f", (previous.average ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.average ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", ((current.average ?: 0) * 1.0) - ((previous.average ?: 0) * 1.0))} ms</td>
                             </tr>
 
                             <tr>
                                 <td>Minimum Response Time</td>
-                                <td>${previous.min} ms</td>
-                                <td>${current.min} ms</td>
-                                <td>${current.min - previous.min} ms</td>
+                                <td>${previous.min ?: 0} ms</td>
+                                <td>${current.min ?: 0} ms</td>
+                                <td>${(current.min ?: 0) - (previous.min ?: 0)} ms</td>
                             </tr>
 
                             <tr>
                                 <td>Maximum Response Time</td>
-                                <td>${previous.max} ms</td>
-                                <td>${current.max} ms</td>
-                                <td>${current.max - previous.max} ms</td>
+                                <td>${previous.max ?: 0} ms</td>
+                                <td>${current.max ?: 0} ms</td>
+                                <td>${(current.max ?: 0) - (previous.max ?: 0)} ms</td>
                             </tr>
 
                             <tr>
                                 <td>Median Response Time</td>
-                                <td>${String.format("%.2f", previous.median * 1.0)} ms</td>
-                                <td>${String.format("%.2f", current.median * 1.0)} ms</td>
-                                <td>${String.format("%.2f", (current.median * 1.0) - (previous.median * 1.0))} ms</td>
+                                <td>${String.format("%.2f", (previous.median ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.median ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", ((current.median ?: 0) * 1.0) - ((previous.median ?: 0) * 1.0))} ms</td>
                             </tr>
 
                             <tr>
                                 <td>90th Percentile</td>
-                                <td>${String.format("%.2f", previous.pct90 * 1.0)} ms</td>
-                                <td>${String.format("%.2f", current.pct90 * 1.0)} ms</td>
-                                <td>${String.format("%.2f", (current.pct90 * 1.0) - (previous.pct90 * 1.0))} ms</td>
+                                <td>${String.format("%.2f", (previous.pct90 ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.pct90 ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", ((current.pct90 ?: 0) * 1.0) - ((previous.pct90 ?: 0) * 1.0))} ms</td>
                             </tr>
 
                             <tr>
                                 <td>95th Percentile</td>
-                                <td>${String.format("%.2f", previous.pct95 * 1.0)} ms</td>
-                                <td>${String.format("%.2f", current.pct95 * 1.0)} ms</td>
-                                <td>${String.format("%.2f", (current.pct95 * 1.0) - (previous.pct95 * 1.0))} ms</td>
+                                <td>${String.format("%.2f", (previous.pct95 ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.pct95 ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", ((current.pct95 ?: 0) * 1.0) - ((previous.pct95 ?: 0) * 1.0))} ms</td>
                             </tr>
 
                             <tr>
                                 <td>99th Percentile</td>
-                                <td>${String.format("%.2f", previous.pct99 * 1.0)} ms</td>
-                                <td>${String.format("%.2f", current.pct99 * 1.0)} ms</td>
-                                <td>${String.format("%.2f", (current.pct99 * 1.0) - (previous.pct99 * 1.0))} ms</td>
+                                <td>${String.format("%.2f", (previous.pct99 ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.pct99 ?: 0) * 1.0)} ms</td>
+                                <td>${String.format("%.2f", ((current.pct99 ?: 0) * 1.0) - ((previous.pct99 ?: 0) * 1.0))} ms</td>
                             </tr>
 
                             <tr>
                                 <td>Throughput</td>
-                                <td>${String.format("%.2f", previous.throughput * 1.0)}</td>
-                                <td>${String.format("%.2f", current.throughput * 1.0)}</td>
-                                <td>${String.format("%.2f", (current.throughput * 1.0) - (previous.throughput * 1.0))}</td>
+                                <td>${String.format("%.2f", (previous.throughput ?: 0) * 1.0)}</td>
+                                <td>${String.format("%.2f", (current.throughput ?: 0) * 1.0)}</td>
+                                <td>${String.format("%.2f", ((current.throughput ?: 0) * 1.0) - ((previous.throughput ?: 0) * 1.0))}</td>
                             </tr>
                         </table>
                         """
@@ -199,16 +189,14 @@ pipeline {
                     } else {
                         html += """
                         <h3>No Previous Build Found</h3>
-                        <p>This is the first available build summary.</p>
-                        <p>From the next successful build, Jenkins will compare current build details with previous build details.</p>
+                        <p>From the next successful build, comparison will be generated.</p>
                         """
                     }
 
                     html += """
-                    <br><br>
-                    <h3>Report Location In Workspace</h3>
+                    <br>
+                    <h3>Workspace Report Path</h3>
                     <p>aggregate-report\\aggregate-comparison-report.html</p>
-
                     </body>
                     </html>
                     """
@@ -254,24 +242,14 @@ pipeline {
                 body: """
                 <html>
                 <body>
-
                 <h2>SCR01 Aggregate Comparison Report Generated</h2>
-
                 <h3>Job Name : Jenkins_Comparision</h3>
                 <h3>Build Number : ${BUILD_NUMBER}</h3>
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
-                <p>The aggregate comparison report contains previous build and current build details.</p>
-
-                <p>Report is available in:</p>
-                <ul>
-                    <li>Jenkins UI</li>
-                    <li>Workspace: aggregate-report\\aggregate-comparison-report.html</li>
-                    <li>Email attachment as ZIP</li>
-                </ul>
+                <p>The aggregate comparison report is available in Jenkins UI, workspace, and email attachment.</p>
 
                 <a href="${BUILD_URL}">Open Jenkins Build</a>
-
                 </body>
                 </html>
                 """,
