@@ -120,16 +120,16 @@ pipeline {
 
                             <tr>
                                 <td>Error %</td>
-                                <td>${String.format("%.2f", previous.errorPct.toDouble())}%</td>
-                                <td>${String.format("%.2f", current.errorPct.toDouble())}%</td>
-                                <td>${String.format("%.2f", current.errorPct.toDouble() - previous.errorPct.toDouble())}%</td>
+                                <td>${String.format("%.2f", previous.errorPct * 1.0)}%</td>
+                                <td>${String.format("%.2f", current.errorPct * 1.0)}%</td>
+                                <td>${String.format("%.2f", (current.errorPct * 1.0) - (previous.errorPct * 1.0))}%</td>
                             </tr>
 
                             <tr>
                                 <td>Average Response Time</td>
-                                <td>${String.format("%.2f", previous.average.toDouble())} ms</td>
-                                <td>${String.format("%.2f", current.average.toDouble())} ms</td>
-                                <td>${String.format("%.2f", current.average.toDouble() - previous.average.toDouble())} ms</td>
+                                <td>${String.format("%.2f", previous.average * 1.0)} ms</td>
+                                <td>${String.format("%.2f", current.average * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.average * 1.0) - (previous.average * 1.0))} ms</td>
                             </tr>
 
                             <tr>
@@ -148,23 +148,23 @@ pipeline {
 
                             <tr>
                                 <td>Median Response Time</td>
-                                <td>${String.format("%.2f", previous.median.toDouble())} ms</td>
-                                <td>${String.format("%.2f", current.median.toDouble())} ms</td>
-                                <td>${String.format("%.2f", current.median.toDouble() - previous.median.toDouble())} ms</td>
+                                <td>${String.format("%.2f", previous.median * 1.0)} ms</td>
+                                <td>${String.format("%.2f", current.median * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.median * 1.0) - (previous.median * 1.0))} ms</td>
                             </tr>
 
                             <tr>
                                 <td>90th Percentile</td>
-                                <td>${String.format("%.2f", previous.pct90.toDouble())} ms</td>
-                                <td>${String.format("%.2f", current.pct90.toDouble())} ms</td>
-                                <td>${String.format("%.2f", current.pct90.toDouble() - previous.pct90.toDouble())} ms</td>
+                                <td>${String.format("%.2f", previous.pct90 * 1.0)} ms</td>
+                                <td>${String.format("%.2f", current.pct90 * 1.0)} ms</td>
+                                <td>${String.format("%.2f", (current.pct90 * 1.0) - (previous.pct90 * 1.0))} ms</td>
                             </tr>
 
                             <tr>
                                 <td>Throughput</td>
-                                <td>${String.format("%.2f", previous.throughput.toDouble())}</td>
-                                <td>${String.format("%.2f", current.throughput.toDouble())}</td>
-                                <td>${String.format("%.2f", current.throughput.toDouble() - previous.throughput.toDouble())}</td>
+                                <td>${String.format("%.2f", previous.throughput * 1.0)}</td>
+                                <td>${String.format("%.2f", current.throughput * 1.0)}</td>
+                                <td>${String.format("%.2f", (current.throughput * 1.0) - (previous.throughput * 1.0))}</td>
                             </tr>
                         </table>
                         """
@@ -181,8 +181,7 @@ pipeline {
                     </html>
                     """
 
-                    writeFile file: 'comparison/comparison-report.html',
-                    text: comparisonHtml
+                    writeFile file: 'comparison/comparison-report.html', text: comparisonHtml
 
                     bat """
                     copy "comparison\\current-summary.json" "%HISTORY_DIR%\\previous-summary.json" /Y
