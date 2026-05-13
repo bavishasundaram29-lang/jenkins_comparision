@@ -45,7 +45,7 @@ pipeline {
             }
         }
 
-        stage('Generate Current Aggregate Summary') {
+        stage('Generate Current Summary') {
             steps {
                 script {
                     def stats = readJSON file: "report/${REPORT_NAME}/statistics.json"
@@ -82,8 +82,40 @@ pipeline {
 
                     def html = """
                     <html>
+                    <head>
+                    <style>
+                        body {
+                            font-family: Arial;
+                        }
+
+                        h2 {
+                            color: #4B0082;
+                        }
+
+                        table {
+                            border-collapse: collapse;
+                            width: 100%;
+                        }
+
+                        th {
+                            background-color: #6A5ACD;
+                            color: white;
+                            border: 1px solid black;
+                            padding: 8px;
+                            text-align: center;
+                        }
+
+                        td {
+                            border: 1px solid black;
+                            padding: 8px;
+                            text-align: center;
+                            background-color: #d9f2d9;
+                        }
+                    </style>
+                    </head>
+
                     <body>
-                    <h2>SCR01 JPetstore Aggregate Comparison Report</h2>
+                    <h2>SCR01 Aggregate Comparison Report</h2>
                     <h3>Job Name : Jenkins_Comparision</h3>
                     <h3>Current Build : #${BUILD_NUMBER}</h3>
                     <br>
@@ -99,9 +131,13 @@ pipeline {
                         def current = readJSON file: 'aggregate-report/current-summary.json'
 
                         html += """
-                        <table border="1" cellpadding="6" cellspacing="0">
+                        <table>
                             <tr>
-                                <th>Metric</th>
+                                <th rowspan="2">Metric</th>
+                                <th colspan="3">Build Comparison</th>
+                            </tr>
+
+                            <tr>
                                 <th>Previous Build #${previous.buildNumber}</th>
                                 <th>Current Build #${current.buildNumber}</th>
                                 <th>Difference</th>
@@ -189,14 +225,11 @@ pipeline {
                     } else {
                         html += """
                         <h3>No Previous Build Found</h3>
-                        <p>From the next successful build, comparison will be generated.</p>
+                        <p>Comparison report will generate from next successful build onwards.</p>
                         """
                     }
 
                     html += """
-                    <br>
-                    <h3>Workspace Report Path</h3>
-                    <p>aggregate-report\\aggregate-comparison-report.html</p>
                     </body>
                     </html>
                     """
@@ -247,7 +280,7 @@ pipeline {
                 <h3>Build Number : ${BUILD_NUMBER}</h3>
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
-                <p>The aggregate comparison report is available in Jenkins UI, workspace, and email attachment.</p>
+                <p>The aggregate comparison report is published in Jenkins UI and attached as ZIP file.</p>
 
                 <a href="${BUILD_URL}">Open Jenkins Build</a>
                 </body>
