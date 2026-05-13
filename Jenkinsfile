@@ -7,7 +7,7 @@ pipeline {
         JMETER_HOME = "C:\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3"
         JMETER = "${JMETER_HOME}\\bin\\jmeter.bat"
 
-        JMX_FILE = "Jenkins_Comparision\\SCR01_Jpetstore.jmx"
+        JMX_FILE = "jpetstore_jenkins_comparision\\SCR01_Jpetstore.jmx"
 
         REPORT_NAME = "SCR01_Report_Build_${BUILD_NUMBER}"
     }
@@ -93,7 +93,7 @@ pipeline {
                 script {
 
                     copyArtifacts(
-                        projectName: 'Jenkins_comparision',
+                        projectName: 'Jenkins_Comparision',
                         selector: lastSuccessful(),
                         filter: 'comparison/current-summary.json',
                         target: 'comparison/previous',
@@ -272,9 +272,9 @@ pipeline {
                 <html>
                 <body>
 
-                <h2>Jenkins SCR01 JPetstore Execution Completed</h2>
+                <h2>SCR01 JPetstore Execution Completed</h2>
 
-                <h3>Job Name : Jenkins_comparision</h3>
+                <h3>Job Name : Jenkins_Comparision</h3>
 
                 <h3>Build Number : ${BUILD_NUMBER}</h3>
 
@@ -282,7 +282,7 @@ pipeline {
 
                 <br>
 
-                <h3>Reports Available In Jenkins UI</h3>
+                <h3>Reports Published In Jenkins UI</h3>
 
                 <ul>
 
@@ -298,18 +298,18 @@ pipeline {
 
                 <br>
 
-                <h3>Download Report</h3>
+                <h3>Download Report ZIP</h3>
 
                 <a href="${BUILD_URL}artifact/zipreport/${REPORT_NAME}.zip">
-                Download HTML Report ZIP
+                Download HTML Report
                 </a>
 
                 <br><br>
 
-                <h3>Build URL</h3>
+                <h3>Open Jenkins Build</h3>
 
                 <a href="${BUILD_URL}">
-                Open Jenkins Build
+                Open Build
                 </a>
 
                 </body>
