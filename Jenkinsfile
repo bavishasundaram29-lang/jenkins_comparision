@@ -127,7 +127,14 @@ pipeline {
 
                         .transaction-col {
                             text-align: left;
-                            padding-left: 15px;
+                            padding-left: 12px;
+                            white-space: nowrap;
+                            font-weight: bold;
+                        }
+
+                        .request-col {
+                            text-align: left;
+                            padding-left: 12px;
                             word-break: break-word;
                         }
                     </style>
@@ -145,6 +152,7 @@ pipeline {
                         <table>
                             <tr>
                                 <th rowspan="2">Transaction</th>
+                                <th rowspan="2">Request</th>
                                 <th colspan="4">Response Time (ms)</th>
                                 <th colspan="3">Samples</th>
                                 <th colspan="3">Errors</th>
@@ -182,12 +190,36 @@ pipeline {
                                 ]
                             }
 
-                            String transactionName = apiName
+                            String transactionName = ""
+                            String requestName = apiName
 
-                            if (transactionName.contains("/")) {
-                                transactionName = transactionName.substring(transactionName.indexOf("/"))
+                            def tMatch = (apiName =~ /(SCR\\d+_T\\d+)/)
+                            if (tMatch.find()) {
+                                transactionName = tMatch.group(1)
+                            }
+
+                            def rMatch = (apiName =~ /(R\\d+)/)
+                            String requestNo = ""
+                            if (rMatch.find()) {
+                                requestNo = rMatch.group(1)
+                            }
+
+                            if (apiName.contains("/")) {
+                                String pathName = apiName.substring(apiName.indexOf("/") + 1)
+                                if (requestNo != "") {
+                                    requestName = requestNo + " - " + pathName
+                                } else {
+                                    requestName = pathName
+                                }
                             } else {
-                                transactionName = transactionName.replaceAll('_', ' ')
+                                requestName = apiName
+                                    .replaceAll(/^SCR\\d+_T\\d+_?/, '')
+                                    .replaceAll(/^R\\d+_?/, '')
+                                    .replaceAll('_', ' ')
+
+                                if (requestName.trim() == "") {
+                                    requestName = apiName.replaceAll('_', ' ')
+                                }
                             }
 
                             double prevRT = (prev.responseTime ?: 0) as double
@@ -206,6 +238,7 @@ pipeline {
                             html += """
                             <tr>
                                 <td class="transaction-col">${transactionName}</td>
+                                <td class="request-col">${requestName}</td>
 
                                 <td>${String.format("%.4f", prevRT)}</td>
                                 <td>${String.format("%.4f", curRT)}</td>
