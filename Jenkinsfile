@@ -4,11 +4,8 @@ pipeline {
     environment {
         JMETER_HOME = "C:\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3"
         JMETER = "${JMETER_HOME}\\bin\\jmeter.bat"
-
         JMX_FILE = "jpetstore_jenkins_comparision\\SCR01_Jpetstore.jmx"
-
         REPORT_NAME = "SCR01_Report_Build_${BUILD_NUMBER}"
-
         HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Jenkins_Comparision_History"
     }
 
@@ -51,15 +48,11 @@ pipeline {
         stage('Generate Current Summary') {
             steps {
                 script {
-
                     def stats = readJSON file: "report/${REPORT_NAME}/statistics.json"
-
                     def apiSummary = [:]
 
                     stats.each { apiName, data ->
-
                         if (apiName != "Total") {
-
                             apiSummary[apiName] = [
                                 responseTime : data.meanResTime ?: 0,
                                 samples      : data.sampleCount ?: 0,
@@ -68,13 +61,11 @@ pipeline {
                         }
                     }
 
-                    def currentSummary = [
+                    writeJSON file: 'aggregate-report/current-summary.json',
+                    json: [
                         buildNumber : env.BUILD_NUMBER,
                         apis        : apiSummary
-                    ]
-
-                    writeJSON file: 'aggregate-report/current-summary.json',
-                    json: currentSummary,
+                    ],
                     pretty: 4
                 }
             }
@@ -83,28 +74,20 @@ pipeline {
         stage('Create API Wise Comparison Report') {
             steps {
                 script {
-
                     bat """
                     if not exist "%HISTORY_DIR%" mkdir "%HISTORY_DIR%"
                     """
 
                     def html = """
                     <html>
-
                     <head>
-
                     <style>
-
                         body {
                             font-family: Arial;
                             margin: 20px;
                         }
 
-                        h1 {
-                            color: black;
-                        }
-
-                        h2 {
+                        h1, h2 {
                             color: black;
                         }
 
@@ -114,28 +97,20 @@ pipeline {
                             margin-top: 20px;
                         }
 
-                        th {
+                        th, td {
                             border: 1px solid black;
                             padding: 8px;
                             text-align: center;
+                        }
+
+                        th {
                             background-color: #f2f2f2;
                             font-weight: bold;
                         }
-
-                        td {
-                            border: 1px solid black;
-                            padding: 8px;
-                            text-align: center;
-                        }
-
                     </style>
-
                     </head>
-
                     <body>
-
                     <h1>API Wise Comparison Report</h1>
-
                     """
 
                     if (fileExists("${HISTORY_DIR}\\previous-summary.json")) {
@@ -145,26 +120,20 @@ pipeline {
                         """
 
                         def previous = readJSON file: 'aggregate-report/previous-summary.json'
-
                         def current = readJSON file: 'aggregate-report/current-summary.json'
 
                         html += """
                         <h2>Build #${previous.buildNumber} vs Build #${current.buildNumber}</h2>
 
                         <table>
-
                             <tr>
                                 <th rowspan="2">API Name</th>
-
                                 <th colspan="4">Response Time (ms)</th>
-
                                 <th colspan="3">Samples</th>
-
                                 <th colspan="3">Errors</th>
                             </tr>
 
                             <tr>
-
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
@@ -177,7 +146,6 @@ pipeline {
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
-
                             </tr>
                         """
 
@@ -185,52 +153,38 @@ pipeline {
 
                             def prev = previous.apis[apiName] ?: [
                                 responseTime : 0,
-                                samples : 0,
-                                errors : 0
+                                samples      : 0,
+                                errors       : 0
                             ]
 
                             double prevRT = (prev.responseTime ?: 0) as double
-                            double curRT  = (cur.responseTime ?: 0) as double
-
+                            double curRT = (cur.responseTime ?: 0) as double
                             double rtDev = curRT - prevRT
-
                             double rtPct = prevRT > 0 ? (rtDev / prevRT) * 100 : 0
 
                             int prevSamples = (prev.samples ?: 0) as int
-                            int curSamples  = (cur.samples ?: 0) as int
-
+                            int curSamples = (cur.samples ?: 0) as int
                             int sampleDev = curSamples - prevSamples
 
                             int prevErrors = (prev.errors ?: 0) as int
-                            int curErrors  = (cur.errors ?: 0) as int
-
+                            int curErrors = (cur.errors ?: 0) as int
                             int errorDev = curErrors - prevErrors
 
                             html += """
                             <tr>
-
                                 <td>${apiName}</td>
-
                                 <td>${String.format("%.4f", prevRT)}</td>
-
                                 <td>${String.format("%.4f", curRT)}</td>
-
                                 <td>${String.format("%.4f", rtDev)}</td>
-
                                 <td>${String.format("%.2f", rtPct)}%</td>
 
                                 <td>${prevSamples}</td>
-
                                 <td>${curSamples}</td>
-
                                 <td>${sampleDev}</td>
 
                                 <td>${prevErrors}</td>
-
                                 <td>${curErrors}</td>
-
                                 <td>${errorDev}</td>
-
                             </tr>
                             """
                         }
@@ -239,15 +193,11 @@ pipeline {
                         </table>
                         """
 
-                    }
-                    else {
+                    } else {
 
                         html += """
                         <h2>No Previous Build Found</h2>
-
-                        <p>
-                        Comparison report will generate from next successful build onwards.
-                        </p>
+                        <p>Comparison report will generate from next successful build onwards.</p>
                         """
                     }
 
@@ -268,70 +218,70 @@ pipeline {
 
         stage('Create ZIP Report') {
             steps {
-
                 powershell """
                 Compress-Archive -Path "aggregate-report\\*" -DestinationPath "zipreport\\SCR01_Aggregate_Comparison_Build_${BUILD_NUMBER}.zip" -Force
                 """
             }
         }
 
-        stage('Publish Aggregate Report In Jenkins UI') {
+        stage('Publish Report In Jenkins UI') {
             steps {
-
                 publishHTML([
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
                     keepAll: true,
                     reportDir: 'aggregate-report',
                     reportFiles: 'aggregate-comparison-report.html',
-                    reportName: "SCR01 Aggregate Comparison Report"
+                    reportName: 'API Wise Comparison Report'
                 ])
+            }
+        }
+
+        stage('Archive Reports') {
+            steps {
+                archiveArtifacts artifacts: 'results/*.jtl, report/**/*, aggregate-report/**/*, zipreport/*.zip',
+                fingerprint: true
             }
         }
     }
 
     post {
-
         always {
-
             emailext(
-                subject: "SCR01 Aggregate Comparison Report - Build ${BUILD_NUMBER}",
-
+                subject: "SCR01 API Wise Comparison Report - Build ${BUILD_NUMBER}",
                 mimeType: 'text/html',
-
                 to: 'bavishasundar@gmail.com',
-
                 body: """
                 <html>
-
                 <body>
 
-                <h2>SCR01 Aggregate Comparison Report Generated</h2>
+                <h2>SCR01 API Wise Comparison Report Generated</h2>
 
                 <h3>Job Name : Jenkins_Comparision</h3>
-
                 <h3>Build Number : ${BUILD_NUMBER}</h3>
-
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
+                <p>API wise comparison report is generated successfully.</p>
+
                 <p>
-                Aggregate comparison report is generated successfully.
+                <b>Download ZIP Report:</b>
+                <a href="${BUILD_URL}artifact/zipreport/SCR01_Aggregate_Comparison_Build_${BUILD_NUMBER}.zip">
+                Click here to download ZIP
+                </a>
                 </p>
 
+                <p>
+                <b>Open Jenkins Build:</b>
                 <a href="${BUILD_URL}">
-                Open Jenkins Build
+                Click here
                 </a>
+                </p>
 
                 </body>
-
                 </html>
                 """,
-
-                attachmentsPattern: 'zipreport/*.zip'
+                attachmentsPattern: 'zipreport/*.zip, aggregate-report/aggregate-comparison-report.html'
             )
-
-            archiveArtifacts artifacts: 'results/*.jtl, report/**/*, aggregate-report/**/*, zipreport/*.zip',
-            fingerprint: true
         }
     }
 }
