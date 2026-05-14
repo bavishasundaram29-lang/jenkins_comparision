@@ -7,6 +7,7 @@ pipeline {
         JMX_FILE = "jpetstore_jenkins_comparision\\SCR01_Jpetstore.jmx"
         REPORT_NAME = "SCR01_Report_Build_${BUILD_NUMBER}"
         HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Jenkins_Comparision_History"
+        ZIP_NAME = "SCR01_API_Comparison_Build_${BUILD_NUMBER}.zip"
     }
 
     stages {
@@ -78,49 +79,32 @@ pipeline {
                     if not exist "%HISTORY_DIR%" mkdir "%HISTORY_DIR%"
                     """
 
+                    def current = readJSON file: 'aggregate-report/current-summary.json'
+                    def previous = null
+
+                    if (fileExists("${HISTORY_DIR}\\previous-summary.json")) {
+                        bat """
+                        copy "%HISTORY_DIR%\\previous-summary.json" "aggregate-report\\previous-summary.json" /Y
+                        """
+                        previous = readJSON file: 'aggregate-report/previous-summary.json'
+                    }
+
                     def html = """
                     <html>
                     <head>
                     <style>
-                        body {
-                            font-family: Arial;
-                            margin: 20px;
-                        }
-
-                        h1, h2 {
-                            color: black;
-                        }
-
-                        table {
-                            border-collapse: collapse;
-                            width: 100%;
-                            margin-top: 20px;
-                        }
-
-                        th, td {
-                            border: 1px solid black;
-                            padding: 8px;
-                            text-align: center;
-                        }
-
-                        th {
-                            background-color: #f2f2f2;
-                            font-weight: bold;
-                        }
+                        body { font-family: Arial; margin: 20px; }
+                        h1, h2 { color: black; }
+                        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+                        th, td { border: 1px solid black; padding: 8px; text-align: center; }
+                        th { background-color: #f2f2f2; font-weight: bold; }
                     </style>
                     </head>
                     <body>
                     <h1>API Wise Comparison Report</h1>
                     """
 
-                    if (fileExists("${HISTORY_DIR}\\previous-summary.json")) {
-
-                        bat """
-                        copy "%HISTORY_DIR%\\previous-summary.json" "aggregate-report\\previous-summary.json" /Y
-                        """
-
-                        def previous = readJSON file: 'aggregate-report/previous-summary.json'
-                        def current = readJSON file: 'aggregate-report/current-summary.json'
+                    if (previous != null && previous.apis != null) {
 
                         html += """
                         <h2>Build #${previous.buildNumber} vs Build #${current.buildNumber}</h2>
@@ -132,17 +116,14 @@ pipeline {
                                 <th colspan="3">Samples</th>
                                 <th colspan="3">Errors</th>
                             </tr>
-
                             <tr>
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
                                 <th>%</th>
-
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
-
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
@@ -151,11 +132,15 @@ pipeline {
 
                         current.apis.each { apiName, cur ->
 
-                            def prev = previous.apis[apiName] ?: [
-                                responseTime : 0,
-                                samples      : 0,
-                                errors       : 0
-                            ]
+                            def prev = previous.apis[apiName]
+
+                            if (prev == null) {
+                                prev = [
+                                    responseTime : 0,
+                                    samples      : 0,
+                                    errors       : 0
+                                ]
+                            }
 
                             double prevRT = (prev.responseTime ?: 0) as double
                             double curRT = (cur.responseTime ?: 0) as double
@@ -177,11 +162,9 @@ pipeline {
                                 <td>${String.format("%.4f", curRT)}</td>
                                 <td>${String.format("%.4f", rtDev)}</td>
                                 <td>${String.format("%.2f", rtPct)}%</td>
-
                                 <td>${prevSamples}</td>
                                 <td>${curSamples}</td>
                                 <td>${sampleDev}</td>
-
                                 <td>${prevErrors}</td>
                                 <td>${curErrors}</td>
                                 <td>${errorDev}</td>
@@ -194,10 +177,9 @@ pipeline {
                         """
 
                     } else {
-
                         html += """
-                        <h2>No Previous Build Found</h2>
-                        <p>Comparison report will generate from next successful build onwards.</p>
+                        <h2>No Previous API Wise Build Found</h2>
+                        <p>Current build summary is saved. API wise comparison will generate from the next build.</p>
                         """
                     }
 
@@ -219,7 +201,7 @@ pipeline {
         stage('Create ZIP Report') {
             steps {
                 powershell """
-                Compress-Archive -Path "aggregate-report\\*" -DestinationPath "zipreport\\SCR01_Aggregate_Comparison_Build_${BUILD_NUMBER}.zip" -Force
+                Compress-Archive -Path "aggregate-report\\*" -DestinationPath "zipreport\\${ZIP_NAME}" -Force
                 """
             }
         }
@@ -261,11 +243,11 @@ pipeline {
                 <h3>Build Number : ${BUILD_NUMBER}</h3>
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
-                <p>API wise comparison report is generated successfully.</p>
+                <p>API wise comparison report is generated and published in Jenkins UI.</p>
 
                 <p>
                 <b>Download ZIP Report:</b>
-                <a href="${BUILD_URL}artifact/zipreport/SCR01_Aggregate_Comparison_Build_${BUILD_NUMBER}.zip">
+                <a href="${BUILD_URL}artifact/zipreport/${ZIP_NAME}">
                 Click here to download ZIP
                 </a>
                 </p>
