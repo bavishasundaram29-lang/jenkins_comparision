@@ -93,14 +93,35 @@ pipeline {
                     <html>
                     <head>
                     <style>
-                        body { font-family: Arial; margin: 20px; }
-                        h1, h2 { color: black; }
-                        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-                        th, td { border: 1px solid black; padding: 8px; text-align: center; }
-                        th { background-color: #f2f2f2; font-weight: bold; }
+                        body {
+                            font-family: Arial;
+                            margin: 20px;
+                        }
+
+                        h1, h2 {
+                            color: black;
+                        }
+
+                        table {
+                            border-collapse: collapse;
+                            width: 100%;
+                            margin-top: 20px;
+                        }
+
+                        th, td {
+                            border: 1px solid black;
+                            padding: 8px;
+                            text-align: center;
+                        }
+
+                        th {
+                            background-color: #f2f2f2;
+                            font-weight: bold;
+                        }
                     </style>
                     </head>
                     <body>
+
                     <h1>API Wise Comparison Report</h1>
                     """
 
@@ -111,26 +132,58 @@ pipeline {
 
                         <table>
                             <tr>
-                                <th rowspan="2">API Name</th>
+                                <th rowspan="2">Transaction</th>
+                                <th rowspan="2">Request</th>
+
                                 <th colspan="4">Response Time (ms)</th>
                                 <th colspan="3">Samples</th>
                                 <th colspan="3">Errors</th>
                             </tr>
+
                             <tr>
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
                                 <th>%</th>
+
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
+
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
                             </tr>
                         """
 
-                        current.apis.each { apiName, cur ->
+                        def sortedApis = current.apis.keySet().sort { a, b ->
+
+                            def getOrder = { name ->
+                                int t = 999
+                                int r = 999
+
+                                def tm = name =~ /T(\\d+)/
+                                if (tm.find()) {
+                                    t = tm.group(1).toInteger()
+                                }
+
+                                def rm = name =~ /R(\\d+)/
+                                if (rm.find()) {
+                                    r = rm.group(1).toInteger()
+                                }
+
+                                return [t, r, name]
+                            }
+
+                            def ao = getOrder(a)
+                            def bo = getOrder(b)
+
+                            return ao[0] <=> bo[0] ?: ao[1] <=> bo[1] ?: ao[2] <=> bo[2]
+                        }
+
+                        sortedApis.each { apiName ->
+
+                            def cur = current.apis[apiName]
 
                             def prev = previous.apis[apiName]
 
@@ -141,6 +194,19 @@ pipeline {
                                     errors       : 0
                                 ]
                             }
+
+                            def transactionName = apiName
+                            def requestName = apiName
+
+                            def tMatch = apiName =~ /(SCR\\d+_T\\d+)/
+                            if (tMatch.find()) {
+                                transactionName = tMatch.group(1)
+                            }
+
+                            requestName = apiName
+                                .replaceFirst(/^SCR\\d+_T\\d+_?/, '')
+                                .replaceFirst(/^R\\d+_?/, '')
+                                .replace('_', ' ')
 
                             double prevRT = (prev.responseTime ?: 0) as double
                             double curRT = (cur.responseTime ?: 0) as double
@@ -157,14 +223,18 @@ pipeline {
 
                             html += """
                             <tr>
-                                <td>${apiName}</td>
+                                <td>${transactionName}</td>
+                                <td>${requestName}</td>
+
                                 <td>${String.format("%.4f", prevRT)}</td>
                                 <td>${String.format("%.4f", curRT)}</td>
                                 <td>${String.format("%.4f", rtDev)}</td>
                                 <td>${String.format("%.2f", rtPct)}%</td>
+
                                 <td>${prevSamples}</td>
                                 <td>${curSamples}</td>
                                 <td>${sampleDev}</td>
+
                                 <td>${prevErrors}</td>
                                 <td>${curErrors}</td>
                                 <td>${errorDev}</td>
@@ -246,17 +316,17 @@ pipeline {
                 <p>API wise comparison report is generated and published in Jenkins UI.</p>
 
                 <p>
-                <b>Download ZIP Report:</b>
-                <a href="${BUILD_URL}artifact/zipreport/${ZIP_NAME}">
-                Click here to download ZIP
-                </a>
+                    <b>Download ZIP Report:</b>
+                    <a href="${BUILD_URL}artifact/zipreport/${ZIP_NAME}">
+                    Click here to download ZIP
+                    </a>
                 </p>
 
                 <p>
-                <b>Open Jenkins Build:</b>
-                <a href="${BUILD_URL}">
-                Click here
-                </a>
+                    <b>Open Jenkins Build:</b>
+                    <a href="${BUILD_URL}">
+                    Click here
+                    </a>
                 </p>
 
                 </body>
