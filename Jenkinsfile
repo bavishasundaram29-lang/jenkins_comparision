@@ -11,13 +11,14 @@ pipeline {
 
         HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Jenkins_Comparision_History"
 
-        ZIP_NAME = "SCR01_API_Comparison_Build_${BUILD_NUMBER}.zip"
+        ZIP_NAME = "SCR01_Script_Comparison_Build_${BUILD_NUMBER}.zip"
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
+
                 git branch: 'main',
                 url: 'https://github.com/bavishasundaram29-lang/jenkins_comparision.git'
             }
@@ -25,6 +26,7 @@ pipeline {
 
         stage('Clean Workspace') {
             steps {
+
                 bat '''
                 if exist results rmdir /s /q results
                 if exist report rmdir /s /q report
@@ -41,6 +43,7 @@ pipeline {
 
         stage('Run JMeter Test') {
             steps {
+
                 bat """
                 "%JMETER%" -n ^
                 -t "%JMX_FILE%" ^
@@ -82,7 +85,7 @@ pipeline {
             }
         }
 
-        stage('Create API Wise Comparison Report') {
+        stage('Create Script Wise Comparison Report') {
             steps {
                 script {
 
@@ -146,7 +149,7 @@ pipeline {
 
                     <body>
 
-                    <h1>API Wise Comparison Report</h1>
+                    <h1>Script Wise Comparison Report</h1>
                     """
 
                     if (previous != null && previous.apis != null) {
@@ -209,7 +212,7 @@ pipeline {
                                 ]
                             }
 
-                            String transactionName = apiName
+                            String transactionName = ""
 
                             def tMatch = (apiName =~ /(SCR\\d+_T\\d+)/)
 
@@ -219,9 +222,19 @@ pipeline {
 
                             String requestName = apiName.toString()
 
-                            requestName = requestName.replaceAll(/^SCR\\d+_T\\d+_?/, '')
-                            requestName = requestName.replaceAll(/^R\\d+_?/, '')
-                            requestName = requestName.replace('_', ' ')
+                            if (requestName.contains("/")) {
+
+                                requestName = requestName.substring(
+                                    requestName.indexOf("/")
+                                )
+
+                            } else {
+
+                                requestName = requestName
+                                    .replaceAll(/^SCR\\d+_T\\d+_?/, '')
+                                    .replaceAll(/^R\\d+_?/, '')
+                                    .replace('_', ' ')
+                            }
 
                             double prevRT = (prev.responseTime ?: 0) as double
                             double curRT  = (cur.responseTime ?: 0) as double
@@ -322,7 +335,7 @@ pipeline {
                     keepAll: true,
                     reportDir: 'aggregate-report',
                     reportFiles: 'aggregate-comparison-report.html',
-                    reportName: 'API Wise Comparison Report'
+                    reportName: 'Script Wise Comparison Report'
                 ])
             }
         }
@@ -344,7 +357,7 @@ pipeline {
 
             emailext(
 
-                subject: "SCR01 API Wise Comparison Report - Build ${BUILD_NUMBER}",
+                subject: "SCR01 Script Wise Comparison Report - Build ${BUILD_NUMBER}",
 
                 mimeType: 'text/html',
 
@@ -355,7 +368,7 @@ pipeline {
 
                 <body>
 
-                <h2>SCR01 API Wise Comparison Report Generated</h2>
+                <h2>SCR01 Script Wise Comparison Report Generated</h2>
 
                 <h3>Job Name : Jenkins_Comparision</h3>
 
@@ -364,7 +377,7 @@ pipeline {
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
                 <p>
-                API wise comparison report generated successfully.
+                Script wise comparison report generated successfully.
                 </p>
 
                 <p>
