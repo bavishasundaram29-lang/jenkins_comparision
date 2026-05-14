@@ -49,15 +49,11 @@ pipeline {
         stage('Generate Current Summary') {
             steps {
                 script {
-
                     def stats = readJSON file: "report/${REPORT_NAME}/statistics.json"
-
                     def apiSummary = [:]
 
                     stats.each { apiName, data ->
-
                         if (apiName != "Total") {
-
                             apiSummary[apiName.toString()] = [
                                 responseTime : data.meanResTime ?: 0,
                                 samples      : data.sampleCount ?: 0,
@@ -81,78 +77,43 @@ pipeline {
         stage('Create Script Wise Comparison Report') {
             steps {
                 script {
-
                     bat """
                     if not exist "%HISTORY_DIR%" mkdir "%HISTORY_DIR%"
                     """
 
                     def current = readJSON file: 'aggregate-report/current-summary.json'
-
                     def previous = null
 
                     if (fileExists("${HISTORY_DIR}\\previous-summary.json")) {
-
                         bat """
                         copy "%HISTORY_DIR%\\previous-summary.json" "aggregate-report\\previous-summary.json" /Y
                         """
-
                         previous = readJSON file: 'aggregate-report/previous-summary.json'
                     }
 
                     def html = """
                     <html>
-
                     <head>
-
                     <style>
-
-                        body {
-                            font-family: Arial;
-                            margin: 20px;
-                        }
-
-                        h1, h2 {
-                            color: black;
-                        }
-
-                        table {
-                            border-collapse: collapse;
-                            width: 100%;
-                            margin-top: 20px;
-                        }
-
-                        th, td {
-                            border: 1px solid black;
-                            padding: 8px;
-                        }
-
-                        th {
-                            background-color: #f2f2f2;
-                            font-weight: bold;
-                            text-align: center;
-                        }
-
-                        td {
-                            text-align: center;
-                        }
-
+                        body { font-family: Arial; margin: 20px; }
+                        h1, h2 { color: black; }
+                        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+                        th, td { border: 1px solid black; padding: 8px; }
+                        th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+                        td { text-align: center; }
                         .transaction-col {
                             text-align: left;
                             padding-left: 12px;
                             font-weight: bold;
                             white-space: nowrap;
                         }
-
                         .request-col {
                             text-align: left;
                             padding-left: 12px;
                             word-break: break-word;
                         }
-
                     </style>
-
                     </head>
-
                     <body>
 
                     <h1>Script Wise Comparison Report</h1>
@@ -164,53 +125,39 @@ pipeline {
                         <h2>Build #${previous.buildNumber} vs Build #${current.buildNumber}</h2>
 
                         <table>
-
                             <tr>
-
                                 <th rowspan="2">Transaction</th>
-
                                 <th rowspan="2">Request</th>
-
                                 <th colspan="4">Response Time (ms)</th>
-
                                 <th colspan="3">Samples</th>
-
                                 <th colspan="3">Errors</th>
-
                             </tr>
 
                             <tr>
-
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
                                 <th>%</th>
-
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
-
                                 <th>Previous</th>
                                 <th>Current</th>
                                 <th>Deviation</th>
-
                             </tr>
                         """
 
-                        def sortedApis = current.apis.keySet().toList().sort()
-
                         def transactionMap = [:]
+                        def transactionNameMap = [:]
 
-                        sortedApis.each { api ->
-
+                        current.apis.keySet().toList().sort().each { api ->
                             String apiName = api.toString()
 
-                            def transactionKey = "OTHERS"
+                            def matcher = apiName =~ /(SCR[0-9]+_T[0-9]+)/
+                            String transactionKey = "OTHERS"
 
-                            def tMatch = (apiName =~ /(SCR\\d+_T\\d+)/)
-
-                            if (tMatch.find()) {
-                                transactionKey = tMatch.group(1)
+                            if (matcher.find()) {
+                                transactionKey = matcher.group(1)
                             }
 
                             if (!transactionMap.containsKey(transactionKey)) {
@@ -218,28 +165,35 @@ pipeline {
                             }
 
                             transactionMap[transactionKey] << apiName
+
+                            if (!(apiName =~ /_R[0-9]+/)) {
+                                transactionNameMap[transactionKey] = apiName.replaceAll('_', ' ')
+                            }
                         }
 
-                        transactionMap.each { transactionKey, apiList ->
+                        transactionMap.keySet().toList().sort().each { transactionKey ->
 
-                            String transactionDisplay = transactionKey.replaceAll('_', ' ')
+                            def apiList = transactionMap[transactionKey].toList().sort()
 
-                            def launchRequest = apiList.find {
-                                !(it.contains("/"))
+                            def transactionRows = apiList.findAll { !(it =~ /_R[0-9]+/) }
+                            def requestRows = apiList.findAll { it =~ /_R[0-9]+/ }
+
+                            def orderedList = []
+                            orderedList.addAll(transactionRows)
+                            orderedList.addAll(requestRows)
+
+                            String transactionDisplay = transactionNameMap[transactionKey]
+
+                            if (transactionDisplay == null || transactionDisplay.trim() == "") {
+                                transactionDisplay = transactionKey.replaceAll('_', ' ')
                             }
 
-                            if (launchRequest == null) {
-                                launchRequest = apiList[0]
-                            }
-
-                            apiList.each { apiName ->
+                            orderedList.each { apiName ->
 
                                 def cur = current.apis[apiName]
-
                                 def prev = previous.apis[apiName]
 
                                 if (prev == null) {
-
                                     prev = [
                                         responseTime : 0,
                                         samples      : 0,
@@ -247,60 +201,38 @@ pipeline {
                                     ]
                                 }
 
-                                String requestName = apiName
-
-                                requestName = requestName
-                                    .replaceAll('_', ' ')
-                                    .trim()
+                                String requestName = apiName.replaceAll('_', ' ')
 
                                 double prevRT = (prev.responseTime ?: 0) as double
                                 double curRT  = (cur.responseTime ?: 0) as double
-
-                                double rtDev = curRT - prevRT
-
-                                double rtPct = prevRT > 0 ? ((rtDev / prevRT) * 100) : 0
+                                double rtDev  = curRT - prevRT
+                                double rtPct  = prevRT > 0 ? ((rtDev / prevRT) * 100) : 0
 
                                 int prevSamples = (prev.samples ?: 0) as int
                                 int curSamples  = (cur.samples ?: 0) as int
-
-                                int sampleDev = curSamples - prevSamples
+                                int sampleDev   = curSamples - prevSamples
 
                                 int prevErrors = (prev.errors ?: 0) as int
                                 int curErrors  = (cur.errors ?: 0) as int
-
-                                int errorDev = curErrors - prevErrors
+                                int errorDev   = curErrors - prevErrors
 
                                 html += """
                                 <tr>
-
-                                    <td class="transaction-col">
-                                    ${transactionDisplay}
-                                    </td>
-
-                                    <td class="request-col">
-                                    ${requestName}
-                                    </td>
+                                    <td class="transaction-col">${transactionDisplay}</td>
+                                    <td class="request-col">${requestName}</td>
 
                                     <td>${String.format("%.4f", prevRT)}</td>
-
                                     <td>${String.format("%.4f", curRT)}</td>
-
                                     <td>${String.format("%.4f", rtDev)}</td>
-
                                     <td>${String.format("%.2f", rtPct)}%</td>
 
                                     <td>${prevSamples}</td>
-
                                     <td>${curSamples}</td>
-
                                     <td>${sampleDev}</td>
 
                                     <td>${prevErrors}</td>
-
                                     <td>${curErrors}</td>
-
                                     <td>${errorDev}</td>
-
                                 </tr>
                                 """
                             }
@@ -311,14 +243,9 @@ pipeline {
                         """
 
                     } else {
-
                         html += """
                         <h2>No Previous Build Found</h2>
-
-                        <p>
-                        Current build summary saved successfully.
-                        Comparison report will generate from next build.
-                        </p>
+                        <p>Current build summary saved successfully. Comparison report will generate from next build.</p>
                         """
                     }
 
@@ -341,7 +268,6 @@ pipeline {
 
         stage('Create ZIP Report') {
             steps {
-
                 powershell """
                 Compress-Archive -Path "aggregate-report\\*" -DestinationPath "zipreport\\${ZIP_NAME}" -Force
                 """
@@ -350,7 +276,6 @@ pipeline {
 
         stage('Publish Report In Jenkins UI') {
             steps {
-
                 publishHTML([
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
@@ -364,7 +289,6 @@ pipeline {
 
         stage('Archive Reports') {
             steps {
-
                 archiveArtifacts(
                     artifacts: 'results/*.jtl, report/**/*, aggregate-report/**/*, zipreport/*.zip',
                     fingerprint: true
@@ -374,55 +298,40 @@ pipeline {
     }
 
     post {
-
         always {
-
             emailext(
-
                 subject: "SCR01 Script Wise Comparison Report - Build ${BUILD_NUMBER}",
-
                 mimeType: 'text/html',
-
                 to: 'bavishasundar@gmail.com',
-
                 body: """
                 <html>
-
                 <body>
 
                 <h2>SCR01 Script Wise Comparison Report Generated</h2>
 
                 <h3>Job Name : Jenkins_Comparision</h3>
-
                 <h3>Build Number : ${BUILD_NUMBER}</h3>
-
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
+                <p>Script wise comparison report generated successfully.</p>
+
                 <p>
-                Script wise comparison report generated successfully.
+                    <b>Download ZIP Report:</b>
+                    <a href="${BUILD_URL}artifact/zipreport/${ZIP_NAME}">
+                    Click here to download ZIP
+                    </a>
                 </p>
 
                 <p>
-                <b>Download ZIP Report:</b>
-
-                <a href="${BUILD_URL}artifact/zipreport/${ZIP_NAME}">
-                Click here to download ZIP
-                </a>
-                </p>
-
-                <p>
-                <b>Open Jenkins Build:</b>
-
-                <a href="${BUILD_URL}">
-                Click here
-                </a>
+                    <b>Open Jenkins Build:</b>
+                    <a href="${BUILD_URL}">
+                    Click here
+                    </a>
                 </p>
 
                 </body>
-
                 </html>
                 """,
-
                 attachmentsPattern: 'zipreport/*.zip, aggregate-report/aggregate-comparison-report.html'
             )
         }
