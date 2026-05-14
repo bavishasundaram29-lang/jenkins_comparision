@@ -2,17 +2,19 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'BUILD_1', defaultValue: '10', description: 'Enter first build number')
-        string(name: 'BUILD_2', defaultValue: '11', description: 'Enter second build number')
+        string(name: 'BUILD_1', defaultValue: '', description: 'Enter first build number to compare')
+        string(name: 'BUILD_2', defaultValue: '', description: 'Enter second build number to compare')
     }
 
     environment {
         JMETER_HOME = "C:\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3"
         JMETER = "${JMETER_HOME}\\bin\\jmeter.bat"
         JMX_FILE = "jpetstore_jenkins_comparision\\SCR01_Jpetstore.jmx"
-        REPORT_NAME = "SCR01_Report_Build_${BUILD_NUMBER}"
+
         HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Jenkins_Comparision_History"
-        ZIP_NAME = "SCR01_Custom_Comparison_Build_${BUILD_1}_vs_${BUILD_2}.zip"
+
+        REPORT_NAME = "SCR01_Report_Build_${BUILD_NUMBER}"
+        ZIP_NAME = "SCR01_Script_Comparison_Build_${BUILD_NUMBER}.zip"
     }
 
     stages {
@@ -24,7 +26,7 @@ pipeline {
             }
         }
 
-        stage('Clean Workspace') {
+        stage('Clean Current Workspace') {
             steps {
                 bat '''
                 if exist results rmdir /s /q results
@@ -40,7 +42,7 @@ pipeline {
             }
         }
 
-        stage('Run Current JMeter Test') {
+        stage('Run JMeter Test') {
             steps {
                 bat """
                 "%JMETER%" -n ^
@@ -51,11 +53,12 @@ pipeline {
             }
         }
 
-        stage('Save Current Build Summary') {
+        stage('Save Current Build Report History') {
             steps {
                 script {
                     bat """
                     if not exist "%HISTORY_DIR%" mkdir "%HISTORY_DIR%"
+                    if not exist "%HISTORY_DIR%\\Build_${BUILD_NUMBER}" mkdir "%HISTORY_DIR%\\Build_${BUILD_NUMBER}"
                     """
 
                     def stats = readJSON file: "report/${REPORT_NAME}/statistics.json"
@@ -82,6 +85,10 @@ pipeline {
 
                     bat """
                     copy "aggregate-report\\Build_${BUILD_NUMBER}_summary.json" "%HISTORY_DIR%\\Build_${BUILD_NUMBER}_summary.json" /Y
+                    copy "aggregate-report\\Build_${BUILD_NUMBER}_summary.json" "%HISTORY_DIR%\\Build_${BUILD_NUMBER}\\Build_${BUILD_NUMBER}_summary.json" /Y
+
+                    xcopy "results" "%HISTORY_DIR%\\Build_${BUILD_NUMBER}\\results\\" /E /I /Y
+                    xcopy "report" "%HISTORY_DIR%\\Build_${BUILD_NUMBER}\\report\\" /E /I /Y
                     """
                 }
             }
@@ -90,15 +97,33 @@ pipeline {
         stage('Create Selected Build Comparison Report') {
             steps {
                 script {
-                    def build1File = "${HISTORY_DIR}\\Build_${params.BUILD_1}_summary.json"
-                    def build2File = "${HISTORY_DIR}\\Build_${params.BUILD_2}_summary.json"
+                    def build1 = params.BUILD_1?.trim()
+                    def build2 = params.BUILD_2?.trim()
+
+                    if (build1 == "" || build2 == "") {
+                        echo "BUILD_1 or BUILD_2 is empty. Skipping comparison report."
+                        writeFile file: 'aggregate-report/aggregate-comparison-report.html',
+                        text: """
+                        <html>
+                        <body>
+                        <h1>Script Wise Comparison Report</h1>
+                        <h2>No Build Numbers Given</h2>
+                        <p>Current build report and summary are stored successfully.</p>
+                        </body>
+                        </html>
+                        """
+                        return
+                    }
+
+                    def build1File = "${HISTORY_DIR}\\Build_${build1}_summary.json"
+                    def build2File = "${HISTORY_DIR}\\Build_${build2}_summary.json"
 
                     if (!fileExists(build1File)) {
-                        error "Build ${params.BUILD_1} summary not found. Run build ${params.BUILD_1} first using this Jenkinsfile."
+                        error "Build ${build1} summary not found in ${HISTORY_DIR}"
                     }
 
                     if (!fileExists(build2File)) {
-                        error "Build ${params.BUILD_2} summary not found. Run build ${params.BUILD_2} first using this Jenkinsfile."
+                        error "Build ${build2} summary not found in ${HISTORY_DIR}"
                     }
 
                     bat """
@@ -106,8 +131,8 @@ pipeline {
                     copy "${build2File}" "aggregate-report\\build2-summary.json" /Y
                     """
 
-                    def build1 = readJSON file: 'aggregate-report/build1-summary.json'
-                    def build2 = readJSON file: 'aggregate-report/build2-summary.json'
+                    def previous = readJSON file: 'aggregate-report/build1-summary.json'
+                    def current = readJSON file: 'aggregate-report/build2-summary.json'
 
                     def html = """
                     <html>
@@ -126,7 +151,7 @@ pipeline {
                     <body>
 
                     <h1>Script Wise Comparison Report</h1>
-                    <h2>Build #${params.BUILD_1} vs Build #${params.BUILD_2}</h2>
+                    <h2>Build #${build1} vs Build #${build2}</h2>
 
                     <table>
                         <tr>
@@ -138,17 +163,17 @@ pipeline {
                         </tr>
 
                         <tr>
-                            <th>Build #${params.BUILD_1}</th>
-                            <th>Build #${params.BUILD_2}</th>
+                            <th>Build #${build1}</th>
+                            <th>Build #${build2}</th>
                             <th>Deviation</th>
                             <th>%</th>
 
-                            <th>Build #${params.BUILD_1}</th>
-                            <th>Build #${params.BUILD_2}</th>
+                            <th>Build #${build1}</th>
+                            <th>Build #${build2}</th>
                             <th>Deviation</th>
 
-                            <th>Build #${params.BUILD_1}</th>
-                            <th>Build #${params.BUILD_2}</th>
+                            <th>Build #${build1}</th>
+                            <th>Build #${build2}</th>
                             <th>Deviation</th>
                         </tr>
                     """
@@ -156,7 +181,7 @@ pipeline {
                     def transactionMap = [:]
                     def transactionNameMap = [:]
 
-                    build2.apis.keySet().toList().sort().each { api ->
+                    current.apis.keySet().toList().sort().each { api ->
                         String apiName = api.toString()
 
                         def matcher = apiName =~ /(SCR[0-9]+_T[0-9]+)/
@@ -180,7 +205,6 @@ pipeline {
                     transactionMap.keySet().toList().sort().each { transactionKey ->
 
                         def apiList = transactionMap[transactionKey].toList().sort()
-
                         def transactionRows = apiList.findAll { !(it =~ /_R[0-9]+/) }
                         def requestRows = apiList.findAll { it =~ /_R[0-9]+/ }
 
@@ -196,48 +220,48 @@ pipeline {
 
                         orderedList.each { apiName ->
 
-                            def b1 = build1.apis[apiName]
-                            def b2 = build2.apis[apiName]
+                            def prev = previous.apis[apiName]
+                            def cur = current.apis[apiName]
 
-                            if (b1 == null) {
-                                b1 = [responseTime: 0, samples: 0, errors: 0]
+                            if (prev == null) {
+                                prev = [responseTime: 0, samples: 0, errors: 0]
                             }
 
-                            if (b2 == null) {
-                                b2 = [responseTime: 0, samples: 0, errors: 0]
+                            if (cur == null) {
+                                cur = [responseTime: 0, samples: 0, errors: 0]
                             }
 
                             String requestName = apiName.replaceAll('_', ' ')
 
-                            double b1RT = (b1.responseTime ?: 0) as double
-                            double b2RT = (b2.responseTime ?: 0) as double
-                            double rtDev = b2RT - b1RT
-                            double rtPct = b1RT > 0 ? ((rtDev / b1RT) * 100) : 0
+                            double prevRT = (prev.responseTime ?: 0) as double
+                            double curRT  = (cur.responseTime ?: 0) as double
+                            double rtDev  = curRT - prevRT
+                            double rtPct  = prevRT > 0 ? ((rtDev / prevRT) * 100) : 0
 
-                            int b1Samples = (b1.samples ?: 0) as int
-                            int b2Samples = (b2.samples ?: 0) as int
-                            int sampleDev = b2Samples - b1Samples
+                            int prevSamples = (prev.samples ?: 0) as int
+                            int curSamples  = (cur.samples ?: 0) as int
+                            int sampleDev   = curSamples - prevSamples
 
-                            int b1Errors = (b1.errors ?: 0) as int
-                            int b2Errors = (b2.errors ?: 0) as int
-                            int errorDev = b2Errors - b1Errors
+                            int prevErrors = (prev.errors ?: 0) as int
+                            int curErrors  = (cur.errors ?: 0) as int
+                            int errorDev   = curErrors - prevErrors
 
                             html += """
                             <tr>
                                 <td class="transaction-col">${transactionDisplay}</td>
                                 <td class="request-col">${requestName}</td>
 
-                                <td>${String.format("%.4f", b1RT)}</td>
-                                <td>${String.format("%.4f", b2RT)}</td>
+                                <td>${String.format("%.4f", prevRT)}</td>
+                                <td>${String.format("%.4f", curRT)}</td>
                                 <td>${String.format("%.4f", rtDev)}</td>
                                 <td>${String.format("%.2f", rtPct)}%</td>
 
-                                <td>${b1Samples}</td>
-                                <td>${b2Samples}</td>
+                                <td>${prevSamples}</td>
+                                <td>${curSamples}</td>
                                 <td>${sampleDev}</td>
 
-                                <td>${b1Errors}</td>
-                                <td>${b2Errors}</td>
+                                <td>${prevErrors}</td>
+                                <td>${curErrors}</td>
                                 <td>${errorDev}</td>
                             </tr>
                             """
@@ -250,10 +274,11 @@ pipeline {
                     </html>
                     """
 
-                    writeFile(
-                        file: 'aggregate-report/aggregate-comparison-report.html',
-                        text: html
-                    )
+                    writeFile file: 'aggregate-report/aggregate-comparison-report.html', text: html
+
+                    bat """
+                    copy "aggregate-report\\aggregate-comparison-report.html" "%HISTORY_DIR%\\Build_${BUILD_NUMBER}\\aggregate-comparison-report.html" /Y
+                    """
                 }
             }
         }
@@ -262,6 +287,9 @@ pipeline {
             steps {
                 powershell """
                 Compress-Archive -Path "aggregate-report\\*" -DestinationPath "zipreport\\${ZIP_NAME}" -Force
+                """
+                bat """
+                copy "zipreport\\${ZIP_NAME}" "%HISTORY_DIR%\\Build_${BUILD_NUMBER}\\${ZIP_NAME}" /Y
                 """
             }
         }
@@ -292,7 +320,7 @@ pipeline {
     post {
         always {
             emailext(
-                subject: "SCR01 Script Wise Comparison Report - Build ${params.BUILD_1} vs ${params.BUILD_2}",
+                subject: "SCR01 Script Wise Comparison Report - Build ${BUILD_NUMBER}",
                 mimeType: 'text/html',
                 to: 'bavishasundar@gmail.com',
                 body: """
@@ -301,10 +329,12 @@ pipeline {
 
                 <h2>SCR01 Script Wise Comparison Report Generated</h2>
 
+                <h3>Current Jenkins Build : #${BUILD_NUMBER}</h3>
                 <h3>Compared Builds : #${params.BUILD_1} vs #${params.BUILD_2}</h3>
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
-                <p>Selected build comparison report generated successfully.</p>
+                <p>All build reports are stored in:</p>
+                <p><b>${HISTORY_DIR}</b></p>
 
                 <p>
                     <b>Download ZIP Report:</b>
