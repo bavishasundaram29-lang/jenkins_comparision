@@ -1,13 +1,18 @@
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'BUILD_1', defaultValue: '10', description: 'Enter first build number')
+        string(name: 'BUILD_2', defaultValue: '11', description: 'Enter second build number')
+    }
+
     environment {
         JMETER_HOME = "C:\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3"
         JMETER = "${JMETER_HOME}\\bin\\jmeter.bat"
         JMX_FILE = "jpetstore_jenkins_comparision\\SCR01_Jpetstore.jmx"
         REPORT_NAME = "SCR01_Report_Build_${BUILD_NUMBER}"
         HISTORY_DIR = "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Jenkins_Comparision_History"
-        ZIP_NAME = "SCR01_Script_Comparison_Build_${BUILD_NUMBER}.zip"
+        ZIP_NAME = "SCR01_Custom_Comparison_Build_${BUILD_1}_vs_${BUILD_2}.zip"
     }
 
     stages {
@@ -35,7 +40,7 @@ pipeline {
             }
         }
 
-        stage('Run JMeter Test') {
+        stage('Run Current JMeter Test') {
             steps {
                 bat """
                 "%JMETER%" -n ^
@@ -46,9 +51,13 @@ pipeline {
             }
         }
 
-        stage('Generate Current Summary') {
+        stage('Save Current Build Summary') {
             steps {
                 script {
+                    bat """
+                    if not exist "%HISTORY_DIR%" mkdir "%HISTORY_DIR%"
+                    """
+
                     def stats = readJSON file: "report/${REPORT_NAME}/statistics.json"
                     def apiSummary = [:]
 
@@ -63,33 +72,42 @@ pipeline {
                     }
 
                     writeJSON(
-                        file: 'aggregate-report/current-summary.json',
+                        file: "aggregate-report/Build_${BUILD_NUMBER}_summary.json",
                         json: [
                             buildNumber : env.BUILD_NUMBER,
                             apis        : apiSummary
                         ],
                         pretty: 4
                     )
+
+                    bat """
+                    copy "aggregate-report\\Build_${BUILD_NUMBER}_summary.json" "%HISTORY_DIR%\\Build_${BUILD_NUMBER}_summary.json" /Y
+                    """
                 }
             }
         }
 
-        stage('Create Script Wise Comparison Report') {
+        stage('Create Selected Build Comparison Report') {
             steps {
                 script {
+                    def build1File = "${HISTORY_DIR}\\Build_${params.BUILD_1}_summary.json"
+                    def build2File = "${HISTORY_DIR}\\Build_${params.BUILD_2}_summary.json"
+
+                    if (!fileExists(build1File)) {
+                        error "Build ${params.BUILD_1} summary not found. Run build ${params.BUILD_1} first using this Jenkinsfile."
+                    }
+
+                    if (!fileExists(build2File)) {
+                        error "Build ${params.BUILD_2} summary not found. Run build ${params.BUILD_2} first using this Jenkinsfile."
+                    }
+
                     bat """
-                    if not exist "%HISTORY_DIR%" mkdir "%HISTORY_DIR%"
+                    copy "${build1File}" "aggregate-report\\build1-summary.json" /Y
+                    copy "${build2File}" "aggregate-report\\build2-summary.json" /Y
                     """
 
-                    def current = readJSON file: 'aggregate-report/current-summary.json'
-                    def previous = null
-
-                    if (fileExists("${HISTORY_DIR}\\previous-summary.json")) {
-                        bat """
-                        copy "%HISTORY_DIR%\\previous-summary.json" "aggregate-report\\previous-summary.json" /Y
-                        """
-                        previous = readJSON file: 'aggregate-report/previous-summary.json'
-                    }
+                    def build1 = readJSON file: 'aggregate-report/build1-summary.json'
+                    def build2 = readJSON file: 'aggregate-report/build2-summary.json'
 
                     def html = """
                     <html>
@@ -99,157 +117,135 @@ pipeline {
                         h1, h2 { color: black; }
                         table { border-collapse: collapse; width: 100%; margin-top: 20px; }
                         th, td { border: 1px solid black; padding: 8px; }
-                        th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+                        th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
                         td { text-align: center; }
-                        .transaction-col {
-                            text-align: left;
-                            padding-left: 12px;
-                            font-weight: bold;
-                            white-space: nowrap;
-                        }
-                        .request-col {
-                            text-align: left;
-                            padding-left: 12px;
-                            word-break: break-word;
-                        }
+                        .transaction-col { text-align: left; font-weight: bold; white-space: nowrap; }
+                        .request-col { text-align: left; word-break: break-word; }
                     </style>
                     </head>
                     <body>
 
                     <h1>Script Wise Comparison Report</h1>
+                    <h2>Build #${params.BUILD_1} vs Build #${params.BUILD_2}</h2>
+
+                    <table>
+                        <tr>
+                            <th rowspan="2">Transaction</th>
+                            <th rowspan="2">Request</th>
+                            <th colspan="4">Response Time (ms)</th>
+                            <th colspan="3">Samples</th>
+                            <th colspan="3">Errors</th>
+                        </tr>
+
+                        <tr>
+                            <th>Build #${params.BUILD_1}</th>
+                            <th>Build #${params.BUILD_2}</th>
+                            <th>Deviation</th>
+                            <th>%</th>
+
+                            <th>Build #${params.BUILD_1}</th>
+                            <th>Build #${params.BUILD_2}</th>
+                            <th>Deviation</th>
+
+                            <th>Build #${params.BUILD_1}</th>
+                            <th>Build #${params.BUILD_2}</th>
+                            <th>Deviation</th>
+                        </tr>
                     """
 
-                    if (previous != null && previous.apis != null) {
+                    def transactionMap = [:]
+                    def transactionNameMap = [:]
 
-                        html += """
-                        <h2>Build #${previous.buildNumber} vs Build #${current.buildNumber}</h2>
+                    build2.apis.keySet().toList().sort().each { api ->
+                        String apiName = api.toString()
 
-                        <table>
-                            <tr>
-                                <th rowspan="2">Transaction</th>
-                                <th rowspan="2">Request</th>
-                                <th colspan="4">Response Time (ms)</th>
-                                <th colspan="3">Samples</th>
-                                <th colspan="3">Errors</th>
-                            </tr>
+                        def matcher = apiName =~ /(SCR[0-9]+_T[0-9]+)/
+                        String transactionKey = "OTHERS"
 
-                            <tr>
-                                <th>Previous</th>
-                                <th>Current</th>
-                                <th>Deviation</th>
-                                <th>%</th>
-                                <th>Previous</th>
-                                <th>Current</th>
-                                <th>Deviation</th>
-                                <th>Previous</th>
-                                <th>Current</th>
-                                <th>Deviation</th>
-                            </tr>
-                        """
-
-                        def transactionMap = [:]
-                        def transactionNameMap = [:]
-
-                        current.apis.keySet().toList().sort().each { api ->
-                            String apiName = api.toString()
-
-                            def matcher = apiName =~ /(SCR[0-9]+_T[0-9]+)/
-                            String transactionKey = "OTHERS"
-
-                            if (matcher.find()) {
-                                transactionKey = matcher.group(1)
-                            }
-
-                            if (!transactionMap.containsKey(transactionKey)) {
-                                transactionMap[transactionKey] = []
-                            }
-
-                            transactionMap[transactionKey] << apiName
-
-                            if (!(apiName =~ /_R[0-9]+/)) {
-                                transactionNameMap[transactionKey] = apiName.replaceAll('_', ' ')
-                            }
+                        if (matcher.find()) {
+                            transactionKey = matcher.group(1)
                         }
 
-                        transactionMap.keySet().toList().sort().each { transactionKey ->
-
-                            def apiList = transactionMap[transactionKey].toList().sort()
-
-                            def transactionRows = apiList.findAll { !(it =~ /_R[0-9]+/) }
-                            def requestRows = apiList.findAll { it =~ /_R[0-9]+/ }
-
-                            def orderedList = []
-                            orderedList.addAll(transactionRows)
-                            orderedList.addAll(requestRows)
-
-                            String transactionDisplay = transactionNameMap[transactionKey]
-
-                            if (transactionDisplay == null || transactionDisplay.trim() == "") {
-                                transactionDisplay = transactionKey.replaceAll('_', ' ')
-                            }
-
-                            orderedList.each { apiName ->
-
-                                def cur = current.apis[apiName]
-                                def prev = previous.apis[apiName]
-
-                                if (prev == null) {
-                                    prev = [
-                                        responseTime : 0,
-                                        samples      : 0,
-                                        errors       : 0
-                                    ]
-                                }
-
-                                String requestName = apiName.replaceAll('_', ' ')
-
-                                double prevRT = (prev.responseTime ?: 0) as double
-                                double curRT  = (cur.responseTime ?: 0) as double
-                                double rtDev  = curRT - prevRT
-                                double rtPct  = prevRT > 0 ? ((rtDev / prevRT) * 100) : 0
-
-                                int prevSamples = (prev.samples ?: 0) as int
-                                int curSamples  = (cur.samples ?: 0) as int
-                                int sampleDev   = curSamples - prevSamples
-
-                                int prevErrors = (prev.errors ?: 0) as int
-                                int curErrors  = (cur.errors ?: 0) as int
-                                int errorDev   = curErrors - prevErrors
-
-                                html += """
-                                <tr>
-                                    <td class="transaction-col">${transactionDisplay}</td>
-                                    <td class="request-col">${requestName}</td>
-
-                                    <td>${String.format("%.4f", prevRT)}</td>
-                                    <td>${String.format("%.4f", curRT)}</td>
-                                    <td>${String.format("%.4f", rtDev)}</td>
-                                    <td>${String.format("%.2f", rtPct)}%</td>
-
-                                    <td>${prevSamples}</td>
-                                    <td>${curSamples}</td>
-                                    <td>${sampleDev}</td>
-
-                                    <td>${prevErrors}</td>
-                                    <td>${curErrors}</td>
-                                    <td>${errorDev}</td>
-                                </tr>
-                                """
-                            }
+                        if (!transactionMap.containsKey(transactionKey)) {
+                            transactionMap[transactionKey] = []
                         }
 
-                        html += """
-                        </table>
-                        """
+                        transactionMap[transactionKey] << apiName
 
-                    } else {
-                        html += """
-                        <h2>No Previous Build Found</h2>
-                        <p>Current build summary saved successfully. Comparison report will generate from next build.</p>
-                        """
+                        if (!(apiName =~ /_R[0-9]+/)) {
+                            transactionNameMap[transactionKey] = apiName.replaceAll('_', ' ')
+                        }
+                    }
+
+                    transactionMap.keySet().toList().sort().each { transactionKey ->
+
+                        def apiList = transactionMap[transactionKey].toList().sort()
+
+                        def transactionRows = apiList.findAll { !(it =~ /_R[0-9]+/) }
+                        def requestRows = apiList.findAll { it =~ /_R[0-9]+/ }
+
+                        def orderedList = []
+                        orderedList.addAll(transactionRows)
+                        orderedList.addAll(requestRows)
+
+                        String transactionDisplay = transactionNameMap[transactionKey]
+
+                        if (transactionDisplay == null || transactionDisplay.trim() == "") {
+                            transactionDisplay = transactionKey.replaceAll('_', ' ')
+                        }
+
+                        orderedList.each { apiName ->
+
+                            def b1 = build1.apis[apiName]
+                            def b2 = build2.apis[apiName]
+
+                            if (b1 == null) {
+                                b1 = [responseTime: 0, samples: 0, errors: 0]
+                            }
+
+                            if (b2 == null) {
+                                b2 = [responseTime: 0, samples: 0, errors: 0]
+                            }
+
+                            String requestName = apiName.replaceAll('_', ' ')
+
+                            double b1RT = (b1.responseTime ?: 0) as double
+                            double b2RT = (b2.responseTime ?: 0) as double
+                            double rtDev = b2RT - b1RT
+                            double rtPct = b1RT > 0 ? ((rtDev / b1RT) * 100) : 0
+
+                            int b1Samples = (b1.samples ?: 0) as int
+                            int b2Samples = (b2.samples ?: 0) as int
+                            int sampleDev = b2Samples - b1Samples
+
+                            int b1Errors = (b1.errors ?: 0) as int
+                            int b2Errors = (b2.errors ?: 0) as int
+                            int errorDev = b2Errors - b1Errors
+
+                            html += """
+                            <tr>
+                                <td class="transaction-col">${transactionDisplay}</td>
+                                <td class="request-col">${requestName}</td>
+
+                                <td>${String.format("%.4f", b1RT)}</td>
+                                <td>${String.format("%.4f", b2RT)}</td>
+                                <td>${String.format("%.4f", rtDev)}</td>
+                                <td>${String.format("%.2f", rtPct)}%</td>
+
+                                <td>${b1Samples}</td>
+                                <td>${b2Samples}</td>
+                                <td>${sampleDev}</td>
+
+                                <td>${b1Errors}</td>
+                                <td>${b2Errors}</td>
+                                <td>${errorDev}</td>
+                            </tr>
+                            """
+                        }
                     }
 
                     html += """
+                    </table>
                     </body>
                     </html>
                     """
@@ -258,10 +254,6 @@ pipeline {
                         file: 'aggregate-report/aggregate-comparison-report.html',
                         text: html
                     )
-
-                    bat """
-                    copy "aggregate-report\\current-summary.json" "%HISTORY_DIR%\\previous-summary.json" /Y
-                    """
                 }
             }
         }
@@ -300,7 +292,7 @@ pipeline {
     post {
         always {
             emailext(
-                subject: "SCR01 Script Wise Comparison Report - Build ${BUILD_NUMBER}",
+                subject: "SCR01 Script Wise Comparison Report - Build ${params.BUILD_1} vs ${params.BUILD_2}",
                 mimeType: 'text/html',
                 to: 'bavishasundar@gmail.com',
                 body: """
@@ -309,11 +301,10 @@ pipeline {
 
                 <h2>SCR01 Script Wise Comparison Report Generated</h2>
 
-                <h3>Job Name : Jenkins_Comparision</h3>
-                <h3>Build Number : ${BUILD_NUMBER}</h3>
+                <h3>Compared Builds : #${params.BUILD_1} vs #${params.BUILD_2}</h3>
                 <h3>Build Status : ${currentBuild.currentResult}</h3>
 
-                <p>Script wise comparison report generated successfully.</p>
+                <p>Selected build comparison report generated successfully.</p>
 
                 <p>
                     <b>Download ZIP Report:</b>
