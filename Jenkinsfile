@@ -165,8 +165,6 @@ pipeline {
 
                                 <th rowspan="2">Transaction</th>
 
-                                <th rowspan="2">Request</th>
-
                                 <th colspan="4">Response Time (ms)</th>
 
                                 <th colspan="3">Samples</th>
@@ -212,28 +210,18 @@ pipeline {
                                 ]
                             }
 
-                            String transactionName = ""
+                            String transactionName = apiName
 
-                            def tMatch = (apiName =~ /(SCR\\d+_T\\d+)/)
+                            if (transactionName.contains("/")) {
 
-                            if (tMatch.find()) {
-                                transactionName = tMatch.group(1)
-                            }
-
-                            String requestName = apiName.toString()
-
-                            if (requestName.contains("/")) {
-
-                                requestName = requestName.substring(
-                                    requestName.indexOf("/")
+                                transactionName = transactionName.substring(
+                                    transactionName.indexOf("/")
                                 )
 
                             } else {
 
-                                requestName = requestName
-                                    .replaceAll(/^SCR\\d+_T\\d+_?/, '')
-                                    .replaceAll(/^R\\d+_?/, '')
-                                    .replace('_', ' ')
+                                transactionName = transactionName
+                                    .replaceAll('_', ' ')
                             }
 
                             double prevRT = (prev.responseTime ?: 0) as double
@@ -257,8 +245,6 @@ pipeline {
                             <tr>
 
                                 <td>${transactionName}</td>
-
-                                <td>${requestName}</td>
 
                                 <td>${String.format("%.4f", prevRT)}</td>
 
