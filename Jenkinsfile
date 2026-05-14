@@ -191,35 +191,22 @@ pipeline {
                             }
 
                             String transactionName = ""
-                            String requestName = apiName
+                            String requestName = ""
 
                             def tMatch = (apiName =~ /(SCR\\d+_T\\d+)/)
                             if (tMatch.find()) {
                                 transactionName = tMatch.group(1)
-                            }
-
-                            def rMatch = (apiName =~ /(R\\d+)/)
-                            String requestNo = ""
-                            if (rMatch.find()) {
-                                requestNo = rMatch.group(1)
-                            }
-
-                            if (apiName.contains("/")) {
-                                String pathName = apiName.substring(apiName.indexOf("/") + 1)
-                                if (requestNo != "") {
-                                    requestName = requestNo + " - " + pathName
-                                } else {
-                                    requestName = pathName
-                                }
                             } else {
-                                requestName = apiName
-                                    .replaceAll(/^SCR\\d+_T\\d+_?/, '')
-                                    .replaceAll(/^R\\d+_?/, '')
-                                    .replaceAll('_', ' ')
+                                transactionName = "NA"
+                            }
 
-                                if (requestName.trim() == "") {
-                                    requestName = apiName.replaceAll('_', ' ')
-                                }
+                            requestName = apiName
+                                .replaceAll(/^SCR\\d+_T\\d+_?/, '')
+                                .replaceAll('_', ' ')
+                                .trim()
+
+                            if (requestName == "") {
+                                requestName = apiName.replaceAll('_', ' ')
                             }
 
                             double prevRT = (prev.responseTime ?: 0) as double
